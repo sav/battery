@@ -56,35 +56,27 @@ func readBatteries() ([]*battery, error) {
 	return data, nil
 }
 
-func convertBattery(battery *battery) (*Battery, error) {
-	var stateString string
-	switch {
-	case !battery.ExternalConnected:
-		stateString = "Discharging"
-	case battery.IsCharging:
-		stateString = "Charging"
-	case battery.CurrentCapacity == 0:
-		stateString = "Empty"
-	case battery.FullyCharged:
-		stateString = "Full"
-	default:
-		stateString = "Unknown"
-	}
-	state, err := newState(stateString)
-
+func convertBattery(battery *battery) *Battery {
 	b := &Battery{
 		Name:       strconv.Itoa(battery.Location),
-		State:      state,
 		Current:    float64(battery.CurrentCapacity),
 		Full:       float64(battery.MaxCapacity),
 		Design:     float64(battery.DesignCapacity),
 		ChargeRate: math.Abs(float64(battery.Amperage)),
 	}
-
-	if err != nil {
-		return b, PartialError{State: err}
+	switch {
+	case !battery.ExternalConnected:
+		b.State, _ = newState("Discharging")
+	case battery.IsCharging:
+		b.State, _ = newState("Charging")
+	case battery.CurrentCapacity == 0:
+		b.State, _ = newState("Empty")
+	case battery.FullyCharged:
+		b.State, _ = newState("Full")
+	default:
+		b.State, _ = newState("Unknown")
 	}
-	return b, nil
+	return b
 }
 
 func get(idx int) (*Battery, error) {
@@ -95,7 +87,7 @@ func get(idx int) (*Battery, error) {
 
 	for _, battery := range batteries {
 		if battery.Location == idx {
-			return convertBattery(battery)
+			return convertBattery(battery), nil
 		}
 	}
 	return nil, FatalError{Err: errors.New("Not found")}
@@ -110,7 +102,7 @@ func getAll() ([]*Battery, error) {
 	batteries := make([]*Battery, len(_batteries))
 	errors := make(Errors, len(_batteries))
 	for i, battery := range _batteries {
-		batteries[i], errors[i] = convertBattery(battery)
+		batteries[i], errors[i] = convertBattery(battery), nil
 	}
 	if errors.Nil() {
 		return batteries, nil
