@@ -55,7 +55,7 @@ func getByName(name string) (*Battery, error) {
 	}
 
 	b := &Battery{Name: name}
-	e := &PartialError{}
+	e := PartialError{}
 	b.Current, e.Current = readFloat(sysfs, "energy_now")
 	b.Full, e.Full = readFloat(sysfs, "energy_full")
 	b.Design, e.Design = readFloat(sysfs, "energy_full_design")
@@ -87,16 +87,11 @@ func getAll() ([]*Battery, error) {
 	errors := Errors{}
 	for _, file := range files {
 		battery, err := getByName(file.Name())
-		switch err.(type) {
-		case NotBatteryError:
+		if _, ok := err.(NotBatteryError); ok {
 			continue
-		case FatalError:
-			batteries = append(batteries, nil)
-			errors = append(errors, err)
-		default:
-			batteries = append(batteries, battery)
-			errors = append(errors, err)
 		}
+		batteries = append(batteries, battery)
+		errors = append(errors, err)
 	}
 
 	if errors.Nil() {
