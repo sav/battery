@@ -64,6 +64,14 @@ func (p PartialError) Nil() bool {
 		p.ChargeRate == nil
 }
 
+func (p PartialError) NoNil() bool {
+	return p.State != nil &&
+		p.Current != nil &&
+		p.Full != nil &&
+		p.Design != nil &&
+		p.ChargeRate != nil
+}
+
 type Errors []error
 
 func (e Errors) Error() string {
