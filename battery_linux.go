@@ -28,7 +28,7 @@ import (
 	"strconv"
 )
 
-const sysfs = "/sys/class/power_supply"
+const sysfsRoot = "/sys/class/power_supply"
 
 type NotBatteryError struct{}
 
@@ -45,7 +45,7 @@ func readFloat(sysfs, filename string) (float64, error) {
 }
 
 func getByName(name string) (*Battery, error) {
-	sysfs := filepath.Join("/sys/class/power_supply", name)
+	sysfs := filepath.Join(sysfsRoot, name)
 	t, err := ioutil.ReadFile(filepath.Join(sysfs, "type"))
 	if err != nil {
 		return nil, FatalError{Err: err}
@@ -78,7 +78,7 @@ func get(idx int) (*Battery, error) {
 }
 
 func getAll() ([]*Battery, error) {
-	files, err := ioutil.ReadDir("/sys/class/power_supply")
+	files, err := ioutil.ReadDir(sysfsRoot)
 	if err != nil {
 		return nil, FatalError{Err: err}
 	}
