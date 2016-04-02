@@ -30,16 +30,34 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func readUint32(bytes []byte) uint32 {
-	var ret uint32
+func readInt(bytes []byte) int {
+	var ret int
 	for i, b := range bytes {
-		ret |= uint32(b) << (uint32(i) * 8)
+		ret |= int(b) << uint(i*8)
 	}
 	return ret
 }
 
-func readFloat(bytes []byte) float64 {
-	return float64(readUint32(bytes))
+func readUint32(bytes []byte) uint32 {
+	var ret uint32
+	for i, b := range bytes {
+		ret |= uint32(b) << uint(i*8)
+	}
+	return ret
+}
+
+func intToFloat64(num int) (float64, error) {
+	if num == -1 {
+		return 0, fmt.Errorf("Unknown value received")
+	}
+	return float64(num), nil
+}
+
+func uint32ToFloat64(num uint32) (float64, error) {
+	if num == 0xffffffff {
+		return 0, fmt.Errorf("Unknown value received")
+	}
+	return float64(num), nil
 }
 
 func ioctl(fd, nr int, retptr *[164]byte) error {
@@ -61,7 +79,6 @@ func ioctl(fd, nr int, retptr *[164]byte) error {
 }
 
 func get(idx int) (*Battery, error) {
-	// TODO: Checks for UNKNOWN_CAP
 	fd, err := unix.Open("/dev/acpi", unix.O_RDONLY, 0777)
 	if err != nil {
 		return nil, FatalError{Err: err}
@@ -78,8 +95,8 @@ func get(idx int) (*Battery, error) {
 	*unit = idx
 	err = ioctl(fd, 0x10, &retptr)
 	if err == nil {
-		b.Design = readFloat(retptr[4:8]) // acpi_bif.dcap
-		b.Full = readFloat(retptr[8:12])  // acpi_bif.lfcap
+		b.Design, e.Design = uint32ToFloat64(readUint32(retptr[4:8])) // acpi_bif.dcap
+		b.Full, e.Full = uint32ToFloat64(readUint32(retptr[8:12]))    // acpi_bif.lfcap
 	} else {
 		e.Design = err
 		e.Full = err
@@ -88,22 +105,20 @@ func get(idx int) (*Battery, error) {
 	*unit = idx
 	err = ioctl(fd, 0x11, &retptr)
 	if err == nil {
-		var stateString string
-		switch readUint32(retptr[0:4]) { // acpi_bst.state
+		switch readInt(retptr[0:4]) { // acpi_bst.state
 		case 0x0000:
-			stateString = "Full"
+			b.State, _ = newState("Full")
 		case 0x0001:
-			stateString = "Discharging"
+			b.State, _ = newState("Discharging")
 		case 0x0002:
-			stateString = "Charging"
+			b.State, _ = newState("Charging")
 		case 0x0004:
-			stateString = "Empty"
+			b.State, _ = newState("Empty")
 		default:
-			stateString = "Unknown"
+			b.State, _ = newState("Unknown")
 		}
-		b.State, _ = newState(stateString)
-		b.ChargeRate = readFloat(retptr[4:8]) // acpi_bst.rate
-		b.Current = readFloat(retptr[8:12])   // acpi_bst.cap
+		b.ChargeRate, e.ChargeRate = intToFloat64(readInt(retptr[4:8])) // acpi_bst.rate
+		b.Current, e.Current = intToFloat64(readInt(retptr[8:12]))      // acpi_bst.cap
 	} else {
 		e.State = err
 		e.ChargeRate = err
