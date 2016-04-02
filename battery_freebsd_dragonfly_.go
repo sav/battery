@@ -61,6 +61,7 @@ func ioctl(fd, nr int, retptr *[164]byte) error {
 }
 
 func get(idx int) (*Battery, error) {
+	// TODO: Checks for UNKNOWN_CAP
 	fd, err := unix.Open("/dev/acpi", unix.O_RDONLY, 0777)
 	if err != nil {
 		return nil, FatalError{Err: err}
