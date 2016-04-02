@@ -60,22 +60,8 @@ func uint32ToFloat64(num uint32) (float64, error) {
 	return float64(num), nil
 }
 
-func ioctl(fd, nr int, retptr *[164]byte) error {
-	_, _, errno := unix.Syscall(
-		unix.SYS_IOCTL,
-		uintptr(fd),
-		// Some magicks derived from sys/ioccom.h.
-		uintptr((0x40000000|0x80000000)|
-			((int(unsafe.Sizeof(*retptr))&(1<<13-1))<<16)|
-			('B'<<8)|
-			nr,
-		),
-		uintptr(unsafe.Pointer(retptr)),
-	)
-	if errno != 0 {
-		return errno
-	}
-	return nil
+func ioctl_(fd int, nr int64, retptr *[164]byte) error {
+	return ioctl(fd, nr, 'B', unsafe.Sizeof(*retptr), unsafe.Pointer(retptr))
 }
 
 func get(idx int) (*Battery, error) {
@@ -93,7 +79,7 @@ func get(idx int) (*Battery, error) {
 	unit := (*int)(unsafe.Pointer(&retptr[0]))
 
 	*unit = idx
-	err = ioctl(fd, 0x10, &retptr)
+	err = ioctl_(fd, 0x10, &retptr)
 	if err == nil {
 		b.Design, e.Design = uint32ToFloat64(readUint32(retptr[4:8])) // acpi_bif.dcap
 		b.Full, e.Full = uint32ToFloat64(readUint32(retptr[8:12]))    // acpi_bif.lfcap
@@ -103,7 +89,7 @@ func get(idx int) (*Battery, error) {
 	}
 
 	*unit = idx
-	err = ioctl(fd, 0x11, &retptr)
+	err = ioctl_(fd, 0x11, &retptr)
 	if err == nil {
 		switch readInt(retptr[0:4]) { // acpi_bst.state
 		case 0x0000:
