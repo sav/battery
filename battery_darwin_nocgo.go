@@ -46,12 +46,12 @@ type battery struct {
 func readBatteries() ([]*battery, error) {
 	out, err := exec.Command("ioreg", "-n", "AppleSmartBattery", "-r", "-a").Output()
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, err
 	}
 
 	var data []*battery
 	if _, err = plist.Unmarshal(out, &data); err != nil {
-		return nil, FatalError{Err: err}
+		return nil, err
 	}
 	return data, nil
 }
@@ -82,7 +82,7 @@ func convertBattery(battery *battery) *Battery {
 func get(idx int) (*Battery, error) {
 	batteries, err := readBatteries()
 	if err != nil {
-		return nil, err
+		return nil, FatalError{Err: err}
 	}
 
 	for _, battery := range batteries {
@@ -100,12 +100,8 @@ func getAll() ([]*Battery, error) {
 	}
 
 	batteries := make([]*Battery, len(_batteries))
-	errors := make(Errors, len(_batteries))
 	for i, battery := range _batteries {
-		batteries[i], errors[i] = convertBattery(battery), nil
+		batteries[i] = convertBattery(battery)
 	}
-	if errors.Nil() {
-		return batteries, nil
-	}
-	return batteries, errors
+	return batteries, nil
 }
