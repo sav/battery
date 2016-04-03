@@ -29,7 +29,7 @@ import (
 	"os/exec"
 	"strconv"
 
-	"github.com/DHowett/go-plist"
+	"github.com/distatus/go-plist"
 )
 
 type battery struct {
