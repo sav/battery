@@ -1,53 +1,23 @@
 package battery
 
-// #cgo CFLAGS: -std=c99
-// #cgo LDFLAGS: -lsetupapi
 // #define INITGUID
 // #include <stdio.h>
 // #include <windows.h>
 // #include <ddk/batclass.h>
-// #include <setupapi.h>
-// #include <devguid.h>
-// #include <string.h>
 //
-// int GetBatteryState(void* ret) {
-//   HDEVINFO hdev = SetupDiGetClassDevs(&GUID_DEVICE_BATTERY, 0, 0, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
-//   if (INVALID_HANDLE_VALUE != hdev) {
-//     // Limit search to 100 batteries max
-//     for (int idev = 0; idev < 100; idev++) {
-//       SP_DEVICE_INTERFACE_DATA did = {0};
-//       did.cbSize = sizeof(did);
-//
-//       if (SetupDiEnumDeviceInterfaces(hdev, 0, &GUID_DEVICE_BATTERY, idev, &did)) {
-//         DWORD cbRequired = 0;
-//
-//         SetupDiGetDeviceInterfaceDetail(hdev, &did, 0, 0, &cbRequired, 0);
+// void GetBatteryState() {
 //         if (ERROR_INSUFFICIENT_BUFFER == GetLastError()) {
-//           PSP_DEVICE_INTERFACE_DETAIL_DATA pdidd = (PSP_DEVICE_INTERFACE_DETAIL_DATA)LocalAlloc(LPTR, cbRequired);
-//           if (pdidd) {
-//             pdidd->cbSize = sizeof(*pdidd);
-//             if (SetupDiGetDeviceInterfaceDetail(hdev, &did, pdidd, cbRequired, &cbRequired, 0)) {
-//               // Enumerated a battery.  Ask it for information.
-//               memcpy(ret, pdidd->DevicePath, strlen(pdidd->DevicePath));
-//               LocalFree(pdidd);
-// printf("%lu,%ld\n",BATTERY_UNKNOWN_CAPACITY,BATTERY_UNKNOWN_RATE);
 // printf("Capabilities:%d,%d\n",BATTERY_SYSTEM_BATTERY,BATTERY_IS_SHORT_TERM);
-//               return strlen(pdidd->DevicePath);
-//            }
 //          }
-//        }
 //        else if (ERROR_NO_MORE_ITEMS == GetLastError()) {
-//          break;  // Enumeration failed - perhaps we're out of items
+//   //       break;  // Enumeration failed - perhaps we're out of items
 //        }
-//      }
-//     SetupDiDestroyDeviceInfoList(hdev);
-//    }
-// }
 // }
 import "C"
 import (
 	"fmt"
 	"math"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -87,6 +57,20 @@ type batteryStatus struct {
 	Rate       int
 }
 
+type guid struct {
+	Data1 uint
+	Data2 uint16
+	Data3 uint16
+	Data4 [8]byte
+}
+
+type spDeviceInterfaceData struct {
+	cbSize             uint
+	InterfaceClassGuid guid
+	Flags              uint
+	Reserved           uint
+}
+
 func intToFloat64(num int) (float64, error) {
 	// TODO: Check that this works on 64-bit systems.
 	// There is generally something wrong with this constant.
@@ -103,14 +87,86 @@ func uintToFloat64(num uint) (float64, error) {
 	return float64(num), nil
 }
 
+func setupDiCall(proc *windows.LazyProc, nargs, a1, a2, a3, a4, a5, a6 uintptr) (uintptr, error) {
+	r1, _, errno := syscall.Syscall6(proc.Addr(), nargs, a1, a2, a3, a4, a5, a6)
+	if r1 == 0 { // FIXME: Should use windows.InvalidHandle here
+		if errno != 0 {
+			return 0, error(errno)
+		}
+		return 0, syscall.EINVAL
+	}
+	return r1, nil
+}
+
+var setupapi = &windows.LazyDLL{Name: "setupapi.dll", System: true}
+var setupDiGetClassDevsW = setupapi.NewProc("SetupDiGetClassDevsW")
+var setupDiEnumDeviceInterfaces = setupapi.NewProc("SetupDiEnumDeviceInterfaces")
+var setupDiGetDeviceInterfaceDetailW = setupapi.NewProc("SetupDiGetDeviceInterfaceDetailW")
+var setupDiDestroyDeviceInfoList = setupapi.NewProc("SetupDiDestroyDeviceInfoList")
+
 func get(idx int) (*Battery, error) {
-	var ret [255]byte
-	l := C.GetBatteryState(unsafe.Pointer(&ret))
-	devicePathStr := string(ret[:l])
-	devicePath, err := windows.UTF16PtrFromString(devicePathStr)
+	hdev, err := setupDiCall(
+		setupDiGetClassDevsW,
+		4,
+		uintptr(unsafe.Pointer(&C.GUID_DEVICE_BATTERY)),
+		0,
+		0,
+		2|16, // DIGCF_PRESENT|DIGCF_DEVICEINTERFACE
+		0, 0,
+	)
 	if err != nil {
 		return nil, FatalError{Err: err}
 	}
+	defer syscall.Syscall(setupDiDestroyDeviceInfoList.Addr(), 1, hdev, 0, 0)
+
+	var did spDeviceInterfaceData
+	did.cbSize = uint(unsafe.Sizeof(did))
+	_, err = setupDiCall(
+		setupDiEnumDeviceInterfaces,
+		5,
+		hdev,
+		0,
+		uintptr(unsafe.Pointer(&C.GUID_DEVICE_BATTERY)),
+		uintptr(idx),
+		uintptr(unsafe.Pointer(&did)),
+		0,
+	)
+	// FIXME: Insufficient buffer is OK here, exclude it somehow
+	// if err != nil {
+	// 	return nil, FatalError{Err: err}
+	// }
+	var cbRequired uint
+	_, err = setupDiCall(
+		setupDiGetDeviceInterfaceDetailW,
+		6,
+		hdev,
+		uintptr(unsafe.Pointer(&did)),
+		0,
+		0,
+		uintptr(unsafe.Pointer(&cbRequired)),
+		0,
+	)
+	// The god damn struct with ANYSIZE_ARRAY of utf16 in it is crazy.
+	// So... let's emulate it with array of uint16 ;-D.
+	// Keep in mind that the first two/four elements are actually cbSize.
+	uintSize := uint(unsafe.Sizeof(uint(0)) / 2)
+	didd := make([]uint16, cbRequired/uintSize-1)
+	cbSize := (*uint)(unsafe.Pointer(&didd[0]))
+	*cbSize = uintSize*2 + 2
+	_, err = setupDiCall(
+		setupDiGetDeviceInterfaceDetailW,
+		6,
+		hdev,
+		uintptr(unsafe.Pointer(&did)),
+		uintptr(unsafe.Pointer(&didd[0])),
+		uintptr(cbRequired),
+		uintptr(unsafe.Pointer(&cbRequired)),
+		0,
+	)
+	if err != nil {
+		return nil, FatalError{Err: err}
+	}
+	devicePath := &didd[uintSize:][0]
 
 	handle, err := windows.CreateFile(
 		devicePath,
@@ -209,6 +265,6 @@ func get(idx int) (*Battery, error) {
 }
 
 func getAll() ([]*Battery, error) {
-	b, _ := get(0)
-	return []*Battery{b}, nil
+	b, e := get(0)
+	return []*Battery{b}, e
 }
