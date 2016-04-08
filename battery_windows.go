@@ -1,19 +1,5 @@
 package battery
 
-// #define INITGUID
-// #include <stdio.h>
-// #include <windows.h>
-// #include <ddk/batclass.h>
-//
-// void GetBatteryState() {
-//         if (ERROR_INSUFFICIENT_BUFFER == GetLastError()) {
-// printf("Capabilities:%d,%d\n",BATTERY_SYSTEM_BATTERY,BATTERY_IS_SHORT_TERM);
-//          }
-//        else if (ERROR_NO_MORE_ITEMS == GetLastError()) {
-//   //       break;  // Enumeration failed - perhaps we're out of items
-//        }
-// }
-import "C"
 import (
 	"fmt"
 	"math"
@@ -64,6 +50,13 @@ type guid struct {
 	Data4 [8]byte
 }
 
+var guidDeviceBattery = guid{
+	0x72631e54,
+	0x78A4,
+	0x11d0,
+	[8]byte{0xbc, 0xf7, 0x00, 0xaa, 0x00, 0xb7, 0xb3, 0x2a},
+}
+
 type spDeviceInterfaceData struct {
 	cbSize             uint
 	InterfaceClassGuid guid
@@ -87,15 +80,26 @@ func uintToFloat64(num uint) (float64, error) {
 	return float64(num), nil
 }
 
-func setupDiCall(proc *windows.LazyProc, nargs, a1, a2, a3, a4, a5, a6 uintptr) (uintptr, error) {
+func setupDiSetup(proc *windows.LazyProc, nargs, a1, a2, a3, a4, a5, a6 uintptr) (uintptr, error) {
 	r1, _, errno := syscall.Syscall6(proc.Addr(), nargs, a1, a2, a3, a4, a5, a6)
-	if r1 == 0 { // FIXME: Should use windows.InvalidHandle here
+	if windows.Handle(r1) == windows.InvalidHandle {
 		if errno != 0 {
 			return 0, error(errno)
 		}
 		return 0, syscall.EINVAL
 	}
 	return r1, nil
+}
+
+func setupDiCall(proc *windows.LazyProc, nargs, a1, a2, a3, a4, a5, a6 uintptr) syscall.Errno {
+	r1, _, errno := syscall.Syscall6(proc.Addr(), nargs, a1, a2, a3, a4, a5, a6)
+	if r1 == 0 { // FIXME: Should use windows.InvalidHandle here
+		if errno != 0 {
+			return errno
+		}
+		return syscall.EINVAL
+	}
+	return 0
 }
 
 var setupapi = &windows.LazyDLL{Name: "setupapi.dll", System: true}
@@ -105,10 +109,10 @@ var setupDiGetDeviceInterfaceDetailW = setupapi.NewProc("SetupDiGetDeviceInterfa
 var setupDiDestroyDeviceInfoList = setupapi.NewProc("SetupDiDestroyDeviceInfoList")
 
 func get(idx int) (*Battery, error) {
-	hdev, err := setupDiCall(
+	hdev, err := setupDiSetup(
 		setupDiGetClassDevsW,
 		4,
-		uintptr(unsafe.Pointer(&C.GUID_DEVICE_BATTERY)),
+		uintptr(unsafe.Pointer(&guidDeviceBattery)),
 		0,
 		0,
 		2|16, // DIGCF_PRESENT|DIGCF_DEVICEINTERFACE
@@ -121,22 +125,21 @@ func get(idx int) (*Battery, error) {
 
 	var did spDeviceInterfaceData
 	did.cbSize = uint(unsafe.Sizeof(did))
-	_, err = setupDiCall(
+	errno := setupDiCall(
 		setupDiEnumDeviceInterfaces,
 		5,
 		hdev,
 		0,
-		uintptr(unsafe.Pointer(&C.GUID_DEVICE_BATTERY)),
+		uintptr(unsafe.Pointer(&guidDeviceBattery)),
 		uintptr(idx),
 		uintptr(unsafe.Pointer(&did)),
 		0,
 	)
-	// FIXME: Insufficient buffer is OK here, exclude it somehow
-	// if err != nil {
-	// 	return nil, FatalError{Err: err}
-	// }
+	if errno != 0 {
+		return nil, FatalError{Err: errno}
+	}
 	var cbRequired uint
-	_, err = setupDiCall(
+	errno = setupDiCall(
 		setupDiGetDeviceInterfaceDetailW,
 		6,
 		hdev,
@@ -146,6 +149,12 @@ func get(idx int) (*Battery, error) {
 		uintptr(unsafe.Pointer(&cbRequired)),
 		0,
 	)
+	if errno == 259 { //ERROR_NO_MORE_ITEMS
+		return nil, FatalError{Err: fmt.Errorf("Not found")} // TODO: Refactor this into typed error
+	}
+	if errno != 0 && errno != 122 { // ERROR_INSUFFICIENT_BUFFER
+		return nil, FatalError{Err: errno}
+	}
 	// The god damn struct with ANYSIZE_ARRAY of utf16 in it is crazy.
 	// So... let's emulate it with array of uint16 ;-D.
 	// Keep in mind that the first two/four elements are actually cbSize.
@@ -153,7 +162,7 @@ func get(idx int) (*Battery, error) {
 	didd := make([]uint16, cbRequired/uintSize-1)
 	cbSize := (*uint)(unsafe.Pointer(&didd[0]))
 	*cbSize = uintSize*2 + 2
-	_, err = setupDiCall(
+	errno = setupDiCall(
 		setupDiGetDeviceInterfaceDetailW,
 		6,
 		hdev,
@@ -163,7 +172,7 @@ func get(idx int) (*Battery, error) {
 		uintptr(unsafe.Pointer(&cbRequired)),
 		0,
 	)
-	if err != nil {
+	if errno != 0 {
 		return nil, FatalError{Err: err}
 	}
 	devicePath := &didd[uintSize:][0]
