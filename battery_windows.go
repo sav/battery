@@ -1,3 +1,24 @@
+// battery
+// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+//
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+// OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+// OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 package battery
 
 import (
@@ -10,44 +31,51 @@ import (
 )
 
 type batteryQueryInformation struct {
-	BatteryTag       uint
-	InformationLevel int
-	AtRate           int
+	BatteryTag       uint32
+	InformationLevel int32
+	AtRate           int32
 }
 
 type batteryInformation struct {
-	Capabilities        uint
+	Capabilities        uint32
 	Technology          uint8
 	Reserved            [3]uint8
 	Chemistry           [4]uint8
-	DesignedCapacity    uint
-	FullChargedCapacity uint
-	DefaultAlert1       uint
-	DefaultAlert2       uint
-	CriticalBias        uint
-	CycleCount          uint
+	DesignedCapacity    uint32
+	FullChargedCapacity uint32
+	DefaultAlert1       uint32
+	DefaultAlert2       uint32
+	CriticalBias        uint32
+	CycleCount          uint32
 }
 
 type batteryWaitStatus struct {
-	BatteryTag   uint
-	Timeout      uint
-	PowerState   uint
-	LowCapacity  uint
-	HighCapacity uint
+	BatteryTag   uint32
+	Timeout      uint32
+	PowerState   uint32
+	LowCapacity  uint32
+	HighCapacity uint32
 }
 
 type batteryStatus struct {
-	PowerState uint
-	Capacity   uint
-	Voltage    uint
-	Rate       int
+	PowerState uint32
+	Capacity   uint32
+	Voltage    uint32
+	Rate       int32
 }
 
 type guid struct {
-	Data1 uint
+	Data1 uint32
 	Data2 uint16
 	Data3 uint16
 	Data4 [8]byte
+}
+
+type spDeviceInterfaceData struct {
+	cbSize             uint32
+	InterfaceClassGuid guid
+	Flags              uint32
+	Reserved           uint
 }
 
 var guidDeviceBattery = guid{
@@ -57,23 +85,16 @@ var guidDeviceBattery = guid{
 	[8]byte{0xbc, 0xf7, 0x00, 0xaa, 0x00, 0xb7, 0xb3, 0x2a},
 }
 
-type spDeviceInterfaceData struct {
-	cbSize             uint
-	InterfaceClassGuid guid
-	Flags              uint
-	Reserved           uint
-}
-
-func intToFloat64(num int) (float64, error) {
-	// TODO: Check that this works on 64-bit systems.
-	// There is generally something wrong with this constant.
+func int32ToFloat64(num int32) (float64, error) {
+	// There is something wrong with this constant, but
+	// it appears to work so far...
 	if num == -0x80000000 { // BATTERY_UNKNOWN_RATE
 		return 0, fmt.Errorf("Unknown value received")
 	}
 	return math.Abs(float64(num)), nil
 }
 
-func uintToFloat64(num uint) (float64, error) {
+func uint32ToFloat64(num uint32) (float64, error) {
 	if num == 0xffffffff { // BATTERY_UNKNOWN_CAPACITY
 		return 0, fmt.Errorf("Unknown value received")
 	}
@@ -93,7 +114,7 @@ func setupDiSetup(proc *windows.LazyProc, nargs, a1, a2, a3, a4, a5, a6 uintptr)
 
 func setupDiCall(proc *windows.LazyProc, nargs, a1, a2, a3, a4, a5, a6 uintptr) syscall.Errno {
 	r1, _, errno := syscall.Syscall6(proc.Addr(), nargs, a1, a2, a3, a4, a5, a6)
-	if r1 == 0 { // FIXME: Should use windows.InvalidHandle here
+	if r1 == 0 {
 		if errno != 0 {
 			return errno
 		}
@@ -124,7 +145,7 @@ func get(idx int) (*Battery, error) {
 	defer syscall.Syscall(setupDiDestroyDeviceInfoList.Addr(), 1, hdev, 0, 0)
 
 	var did spDeviceInterfaceData
-	did.cbSize = uint(unsafe.Sizeof(did))
+	did.cbSize = uint32(unsafe.Sizeof(did))
 	errno := setupDiCall(
 		setupDiEnumDeviceInterfaces,
 		5,
@@ -135,10 +156,13 @@ func get(idx int) (*Battery, error) {
 		uintptr(unsafe.Pointer(&did)),
 		0,
 	)
+	if errno == 259 { //ERROR_NO_MORE_ITEMS
+		return nil, NotFoundError{}
+	}
 	if errno != 0 {
 		return nil, FatalError{Err: errno}
 	}
-	var cbRequired uint
+	var cbRequired uint32
 	errno = setupDiCall(
 		setupDiGetDeviceInterfaceDetailW,
 		6,
@@ -149,19 +173,19 @@ func get(idx int) (*Battery, error) {
 		uintptr(unsafe.Pointer(&cbRequired)),
 		0,
 	)
-	if errno == 259 { //ERROR_NO_MORE_ITEMS
-		return nil, FatalError{Err: fmt.Errorf("Not found")} // TODO: Refactor this into typed error
-	}
 	if errno != 0 && errno != 122 { // ERROR_INSUFFICIENT_BUFFER
 		return nil, FatalError{Err: errno}
 	}
 	// The god damn struct with ANYSIZE_ARRAY of utf16 in it is crazy.
 	// So... let's emulate it with array of uint16 ;-D.
-	// Keep in mind that the first two/four elements are actually cbSize.
-	uintSize := uint(unsafe.Sizeof(uint(0)) / 2)
-	didd := make([]uint16, cbRequired/uintSize-1)
-	cbSize := (*uint)(unsafe.Pointer(&didd[0]))
-	*cbSize = uintSize*2 + 2
+	// Keep in mind that the first two elements are actually cbSize.
+	didd := make([]uint16, cbRequired/2-1)
+	cbSize := (*uint32)(unsafe.Pointer(&didd[0]))
+	if unsafe.Sizeof(uint(0)) == 8 {
+		*cbSize = 8
+	} else {
+		*cbSize = 6
+	}
 	errno = setupDiCall(
 		setupDiGetDeviceInterfaceDetailW,
 		6,
@@ -173,9 +197,9 @@ func get(idx int) (*Battery, error) {
 		0,
 	)
 	if errno != 0 {
-		return nil, FatalError{Err: err}
+		return nil, FatalError{Err: errno}
 	}
-	devicePath := &didd[uintSize:][0]
+	devicePath := &didd[2:][0]
 
 	handle, err := windows.CreateFile(
 		devicePath,
@@ -247,8 +271,8 @@ func get(idx int) (*Battery, error) {
 		nil,
 	)
 	if err == nil {
-		b.Current, e.Current = uintToFloat64(bs.Capacity)
-		b.ChargeRate, e.ChargeRate = intToFloat64(bs.Rate)
+		b.Current, e.Current = uint32ToFloat64(bs.Capacity)
+		b.ChargeRate, e.ChargeRate = int32ToFloat64(bs.Rate)
 		switch bs.PowerState {
 		case 0x00000004:
 			b.State, _ = newState("Charging")
@@ -274,6 +298,18 @@ func get(idx int) (*Battery, error) {
 }
 
 func getAll() ([]*Battery, error) {
-	b, e := get(0)
-	return []*Battery{b}, e
+	var batteries []*Battery
+	var errors Errors
+	for i := 0; ; i++ {
+		b, err := get(i)
+		if _, ok := err.(NotFoundError); ok {
+			break
+		}
+		batteries = append(batteries, b)
+		errors = append(errors, err)
+	}
+	if errors.Nil() {
+		return batteries, nil
+	}
+	return batteries, errors
 }

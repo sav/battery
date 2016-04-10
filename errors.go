@@ -23,6 +23,12 @@ package battery
 
 import "fmt"
 
+type NotFoundError struct{}
+
+func (n NotFoundError) Error() string {
+	return "Not found"
+}
+
 type FatalError struct {
 	Err error
 }
