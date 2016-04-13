@@ -28,10 +28,10 @@ import (
 	"github.com/distatus/battery"
 )
 
-func printBattery(bat *battery.Battery) {
+func printBattery(idx int, bat *battery.Battery) {
 	fmt.Printf(
-		"%s: %s, %.2f%%",
-		bat.Name,
+		"BAT%d: %s, %.2f%%",
+		idx,
 		bat.State,
 		bat.Current/bat.Full*100,
 	)
@@ -67,7 +67,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	for _, bat := range batteries {
-		printBattery(bat)
+	for i, bat := range batteries {
+		printBattery(i, bat)
 	}
 }

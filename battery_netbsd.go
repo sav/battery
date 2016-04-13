@@ -22,9 +22,9 @@
 package battery
 
 import (
-	"fmt"
+	"math"
 	"sort"
-	"strconv"
+	"strings"
 	"unsafe"
 
 	"github.com/distatus/go-plist"
@@ -37,12 +37,15 @@ type plistref struct {
 	pref_len   uint64
 }
 
-type prop []struct {
+type values struct {
 	Description string `plist:"description"`
 	CurValue    int    `plist:"cur-value"`
 	MaxValue    int    `plist:"max-value"`
 	State       string `plist:"state"`
+	Type        string `plist:"type"`
 }
+
+type prop []values
 
 type props map[string]prop
 
@@ -78,29 +81,62 @@ func readProps() (props, error) {
 	return props, nil
 }
 
-func convertBattery(idx int, prop prop) *Battery {
-	battery := &Battery{Name: fmt.Sprintf("BAT%d", idx)}
+func sortFilterProps(props props) []string {
+	var keys []string
+	for key := range props {
+		if key[:7] != "acpibat" {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func convertBattery(prop prop) *Battery {
+	battery := &Battery{}
+
+	var voltsDesign int
+	var volts int
+	for _, val := range prop {
+		if val.Description == "voltage" {
+			volts = val.CurValue
+		} else if val.Description == "design voltage" {
+			voltsDesign = val.CurValue
+		}
+	}
+
+	maybeAmpToWatt := func(val values) float64 {
+		if strings.HasPrefix(val.Type, "Watt") {
+			return float64(val.CurValue) / 1000
+		}
+		if strings.HasSuffix(val.Description, "cap") {
+			return float64(val.CurValue) / 1000 * float64(voltsDesign)
+		}
+		return float64(val.CurValue) / 1000 * float64(volts)
+	}
+
 	var stateGuard int8
 	for _, val := range prop {
 		switch val.Description {
 		case "design cap":
-			battery.Design = float64(val.CurValue)
+			battery.Design = maybeAmpToWatt(val)
 		case "last full cap":
-			battery.Full = float64(val.CurValue)
+			battery.Full = maybeAmpToWatt(val)
 		case "charge":
-			battery.Current = float64(val.CurValue)
+			battery.Current = maybeAmpToWatt(val)
 			if val.CurValue == val.MaxValue {
 				battery.State, _ = newState("Full")
 			}
 		case "charge rate":
 			if val.State == "valid" {
-				battery.ChargeRate = float64(val.CurValue)
+				battery.ChargeRate = maybeAmpToWatt(val)
 				battery.State, _ = newState("Charging")
 				stateGuard++
 			}
 		case "discharge rate":
 			if val.State == "valid" {
-				battery.ChargeRate = float64(val.CurValue)
+				battery.ChargeRate = math.Abs(maybeAmpToWatt(val))
 				battery.State, _ = newState("Discharging")
 				stateGuard++
 			}
@@ -118,15 +154,11 @@ func get(idx int) (*Battery, error) {
 		return nil, FatalError{Err: err}
 	}
 
-	for key, vals := range props {
-		base, idxStr := key[:7], key[7:]
-		if base != "acpibat" || idxStr != strconv.Itoa(idx) {
-			continue
-		}
-
-		return convertBattery(idx, vals), nil
+	keys := sortFilterProps(props)
+	if idx >= len(keys) {
+		return nil, NotFoundError{}
 	}
-	return nil, FatalError{Err: fmt.Errorf("Not found")}
+	return convertBattery(props[keys[idx]]), nil
 }
 
 func getAll() ([]*Battery, error) {
@@ -135,27 +167,11 @@ func getAll() ([]*Battery, error) {
 		return nil, FatalError{Err: err}
 	}
 
-	var keys []string
-	for key := range props {
-		if key[:7] != "acpibat" {
-			continue
-		}
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
+	keys := sortFilterProps(props)
 	batteries := make([]*Battery, len(keys))
 	errors := make(Errors, len(keys))
 	for i, key := range keys {
-		idx, err := strconv.Atoi(key[7:])
-		if err != nil {
-			// Malformed battery entry name.
-			// This should not happen in reality.
-			errors[i] = FatalError{Err: err}
-			continue
-		}
-
-		batteries[i] = convertBattery(idx, props[key])
+		batteries[i] = convertBattery(props[key])
 	}
 
 	if errors.Nil() {

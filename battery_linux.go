@@ -22,76 +22,115 @@
 package battery
 
 import (
-	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strconv"
 )
 
-const sysfsRoot = "/sys/class/power_supply"
+const sysfs = "/sys/class/power_supply"
 
-type NotBatteryError struct{}
-
-func (n NotBatteryError) Error() string {
-	return "Not battery"
-}
-
-func readFloat(sysfs, filename string) (float64, error) {
-	str, err := ioutil.ReadFile(filepath.Join(sysfs, filename))
+func readFloat(path, filename string) (float64, error) {
+	str, err := ioutil.ReadFile(filepath.Join(path, filename))
 	if err != nil {
 		return 0, err
 	}
-	return strconv.ParseFloat(string(str[:len(str)-1]), 64)
+	num, err := strconv.ParseFloat(string(str[:len(str)-1]), 64)
+	if err != nil {
+		return 0, err
+	}
+	return num / 1000, nil // Convert micro->milli
 }
 
-func getByName(name string) (*Battery, error) {
-	sysfs := filepath.Join(sysfsRoot, name)
-	t, err := ioutil.ReadFile(filepath.Join(sysfs, "type"))
+func readAmp(path, filename string, volts float64) (float64, error) {
+	val, err := readFloat(path, filename)
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return 0, nil
 	}
-	if string(t) != "Battery\n" {
-		return nil, NotBatteryError{}
+	return val * volts, nil
+}
+
+func isBattery(path string) bool {
+	t, err := ioutil.ReadFile(filepath.Join(path, "type"))
+	return err == nil && string(t) == "Battery\n"
+}
+
+func getBatteryFiles() ([]string, error) {
+	files, err := ioutil.ReadDir(sysfs)
+	if err != nil {
+		return nil, err
 	}
 
-	b := &Battery{Name: name}
+	var bFiles []string
+	for _, file := range files {
+		path := filepath.Join(sysfs, file.Name())
+		if isBattery(path) {
+			bFiles = append(bFiles, path)
+		}
+	}
+	return bFiles, nil
+}
+
+func getByPath(path string) (*Battery, error) {
+	b := &Battery{}
 	e := PartialError{}
-	b.Current, e.Current = readFloat(sysfs, "energy_now")
-	b.Full, e.Full = readFloat(sysfs, "energy_full")
-	b.Design, e.Design = readFloat(sysfs, "energy_full_design")
-	b.ChargeRate, e.ChargeRate = readFloat(sysfs, "power_now")
-	state, err := ioutil.ReadFile(filepath.Join(sysfs, "status"))
+	b.Current, e.Current = readFloat(path, "energy_now")
+	if os.IsNotExist(e.Current) {
+		// Get voltage (now always, or now and design?),
+		// get charge_full, etc., calculate...
+		volts, err := readFloat(path, "voltage_now")
+		if err == nil {
+			volts /= 1000000
+			b.Full, e.Full = readAmp(path, "charge_full", volts)
+			b.Design, e.Design = readAmp(path, "charge_full_design", volts)
+			b.ChargeRate, e.ChargeRate = readAmp(path, "current_now", volts)
+		} else {
+			e.Full = err
+			e.Design = err
+			e.ChargeRate = err
+		}
+	} else {
+		b.Full, e.Full = readFloat(path, "energy_full")
+		b.Design, e.Design = readFloat(path, "energy_full_design")
+		b.ChargeRate, e.ChargeRate = readFloat(path, "power_now")
+	}
+	state, err := ioutil.ReadFile(filepath.Join(path, "status"))
 	if err == nil {
 		b.State, e.State = newState(string(state[:len(state)-1]))
 	} else {
 		e.State = err
 	}
 
-	if !e.Nil() {
-		return b, e
+	if e.Nil() {
+		return b, nil
 	}
-	return b, nil
+	return b, e
 }
 
 func get(idx int) (*Battery, error) {
-	return getByName(fmt.Sprintf("BAT%d", idx))
-}
-
-func getAll() ([]*Battery, error) {
-	files, err := ioutil.ReadDir(sysfsRoot)
+	bFiles, err := getBatteryFiles()
 	if err != nil {
 		return nil, FatalError{Err: err}
 	}
 
-	batteries := []*Battery{}
-	errors := Errors{}
-	for _, file := range files {
-		battery, err := getByName(file.Name())
-		if _, ok := err.(NotBatteryError); ok {
-			continue
-		}
-		batteries = append(batteries, battery)
-		errors = append(errors, err)
+	if idx >= len(bFiles) {
+		return nil, NotFoundError{}
+	}
+	return getByPath(bFiles[idx])
+}
+
+func getAll() ([]*Battery, error) {
+	bFiles, err := getBatteryFiles()
+	if err != nil {
+		return nil, FatalError{Err: err}
+	}
+
+	batteries := make([]*Battery, len(bFiles))
+	errors := make(Errors, len(bFiles))
+	for i, bFile := range bFiles {
+		battery, err := getByPath(bFile)
+		batteries[i] = battery
+		errors[i] = err
 	}
 
 	if errors.Nil() {

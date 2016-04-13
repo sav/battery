@@ -49,7 +49,6 @@ func newState(name string) (State, error) {
 }
 
 type Battery struct {
-	Name       string
 	State      State
 	Current    float64
 	Full       float64

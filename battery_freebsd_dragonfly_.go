@@ -24,19 +24,12 @@
 package battery
 
 import (
-	"fmt"
+	"errors"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
-
-func readInt(bytes []byte) int {
-	var ret int
-	for i, b := range bytes {
-		ret |= int(b) << uint(i*8)
-	}
-	return ret
-}
 
 func readUint32(bytes []byte) uint32 {
 	var ret uint32
@@ -46,16 +39,9 @@ func readUint32(bytes []byte) uint32 {
 	return ret
 }
 
-func intToFloat64(num int) (float64, error) {
-	if num == -1 {
-		return 0, fmt.Errorf("Unknown value received")
-	}
-	return float64(num), nil
-}
-
 func uint32ToFloat64(num uint32) (float64, error) {
 	if num == 0xffffffff {
-		return 0, fmt.Errorf("Unknown value received")
+		return 0, errors.New("Unknown value received")
 	}
 	return float64(num), nil
 }
@@ -71,27 +57,36 @@ func get(idx int) (*Battery, error) {
 	}
 	defer unix.Close(fd)
 
-	b := &Battery{Name: fmt.Sprintf("BAT%d", idx)}
+	b := &Battery{}
 	e := PartialError{}
+	var mw bool
 
 	// No unions in Go, so lets "emulate" union with byte array ;-].
 	var retptr [164]byte
 	unit := (*int)(unsafe.Pointer(&retptr[0]))
 
 	*unit = idx
-	err = ioctl_(fd, 0x10, &retptr)
-	if err == nil {
-		b.Design, e.Design = uint32ToFloat64(readUint32(retptr[4:8])) // acpi_bif.dcap
-		b.Full, e.Full = uint32ToFloat64(readUint32(retptr[8:12]))    // acpi_bif.lfcap
-	} else {
-		e.Design = err
-		e.Full = err
+	err = ioctl_(fd, 0x10, &retptr) // ACPIIO_BATT_GET_BIF
+	if err != nil {
+		return nil, FatalError{Err: err}
+	}
+	mw = readUint32(retptr[0:4]) == 0 // acpi_bif.units
+
+	b.Design, e.Design = uint32ToFloat64(readUint32(retptr[4:8])) // acpi_bif.dcap
+	b.Full, e.Full = uint32ToFloat64(readUint32(retptr[8:12]))    // acpi_bif.lfcap
+	if !mw {
+		volts, err := uint32ToFloat64(readUint32(retptr[16:20])) // acpi_bif.dvol
+		if err != nil {
+			return nil, FatalError{Err: err}
+		}
+		b.Design *= volts
+		b.Full *= volts
 	}
 
 	*unit = idx
-	err = ioctl_(fd, 0x11, &retptr)
+	err = ioctl_(fd, 0x11, &retptr) // APCIIO_BATT_GET_BST
 	if err == nil {
-		switch readInt(retptr[0:4]) { // acpi_bst.state
+		switch readUint32(retptr[0:4]) { // acpi_bst.state
 		case 0x0000:
 			b.State, _ = newState("Full")
 		case 0x0001:
@@ -103,18 +98,29 @@ func get(idx int) (*Battery, error) {
 		default:
 			b.State, _ = newState("Unknown")
 		}
-		b.ChargeRate, e.ChargeRate = intToFloat64(readInt(retptr[4:8])) // acpi_bst.rate
-		b.Current, e.Current = intToFloat64(readInt(retptr[8:12]))      // acpi_bst.cap
+		b.ChargeRate, e.ChargeRate = uint32ToFloat64(readUint32(retptr[4:8])) // acpi_bst.rate
+		b.Current, e.Current = uint32ToFloat64(readUint32(retptr[8:12]))      // acpi_bst.cap
+
+		if !mw {
+			volts, err := uint32ToFloat64(readUint32(retptr[12:16])) // acpi_bst.volt
+			if err != nil {
+				e.ChargeRate = err
+				e.Current = err
+			}
+
+			b.ChargeRate *= volts
+			b.Current *= volts
+		}
 	} else {
 		e.State = err
 		e.ChargeRate = err
 		e.Current = err
 	}
 
-	if !e.Nil() {
-		return b, e
+	if e.Nil() {
+		return b, nil
 	}
-	return b, nil
+	return b, e
 }
 
 // There is no way to iterate over available batteries.
@@ -123,10 +129,18 @@ func get(idx int) (*Battery, error) {
 func getAll() ([]*Battery, error) {
 	var batteries []*Battery
 	var errors Errors
+loop:
 	for i := 0; ; i++ {
 		b, err := get(i)
-		if perr, ok := err.(PartialError); ok && perr.NoNil() {
-			break
+		switch perr := err.(type) {
+		case PartialError:
+			if perr.NoNil() {
+				break loop
+			}
+		case FatalError:
+			if errno, ok := perr.Err.(syscall.Errno); ok && errno == 6 {
+				break loop
+			}
 		}
 		batteries = append(batteries, b)
 		errors = append(errors, err)

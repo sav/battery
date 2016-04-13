@@ -22,7 +22,7 @@
 package battery
 
 import (
-	"fmt"
+	"errors"
 	"math"
 	"syscall"
 	"unsafe"
@@ -89,14 +89,14 @@ func int32ToFloat64(num int32) (float64, error) {
 	// There is something wrong with this constant, but
 	// it appears to work so far...
 	if num == -0x80000000 { // BATTERY_UNKNOWN_RATE
-		return 0, fmt.Errorf("Unknown value received")
+		return 0, errors.New("Unknown value received")
 	}
 	return math.Abs(float64(num)), nil
 }
 
 func uint32ToFloat64(num uint32) (float64, error) {
 	if num == 0xffffffff { // BATTERY_UNKNOWN_CAPACITY
-		return 0, fmt.Errorf("Unknown value received")
+		return 0, errors.New("Unknown value received")
 	}
 	return float64(num), nil
 }
@@ -233,10 +233,10 @@ func get(idx int) (*Battery, error) {
 		return nil, FatalError{Err: err}
 	}
 	if bqi.BatteryTag == 0 {
-		return nil, FatalError{Err: fmt.Errorf("BatteryTag not returned")}
+		return nil, FatalError{Err: errors.New("BatteryTag not returned")}
 	}
 
-	b := &Battery{Name: fmt.Sprintf("BAT%d", bqi.BatteryTag)}
+	b := &Battery{}
 	e := PartialError{}
 
 	var bi batteryInformation

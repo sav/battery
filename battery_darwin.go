@@ -22,16 +22,15 @@
 package battery
 
 import (
-	"errors"
 	"math"
 	"os/exec"
-	"strconv"
 
 	"github.com/distatus/go-plist"
 )
 
 type battery struct {
 	Location          int
+	Voltage           int
 	CurrentCapacity   int
 	MaxCapacity       int
 	DesignCapacity    int
@@ -55,12 +54,12 @@ func readBatteries() ([]*battery, error) {
 }
 
 func convertBattery(battery *battery) *Battery {
+	volts := float64(battery.Voltage) / 1000
 	b := &Battery{
-		Name:       strconv.Itoa(battery.Location),
-		Current:    float64(battery.CurrentCapacity),
-		Full:       float64(battery.MaxCapacity),
-		Design:     float64(battery.DesignCapacity),
-		ChargeRate: math.Abs(float64(battery.Amperage)),
+		Current:    float64(battery.CurrentCapacity) * volts,
+		Full:       float64(battery.MaxCapacity) * volts,
+		Design:     float64(battery.DesignCapacity) * volts,
+		ChargeRate: math.Abs(float64(battery.Amperage)) * volts,
 	}
 	switch {
 	case !battery.ExternalConnected:
@@ -83,12 +82,10 @@ func get(idx int) (*Battery, error) {
 		return nil, FatalError{Err: err}
 	}
 
-	for _, battery := range batteries {
-		if battery.Location == idx {
-			return convertBattery(battery), nil
-		}
+	if idx >= len(batteries) {
+		return nil, NotFoundError{}
 	}
-	return nil, FatalError{Err: errors.New("Not found")}
+	return convertBattery(batteries[idx]), nil
 }
 
 func getAll() ([]*Battery, error) {
