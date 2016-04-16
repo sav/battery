@@ -19,10 +19,23 @@
 // TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 // OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// Package battery provides cross-platform, normalized battery information.
+//
+// Gives access to a system independent, typed battery state and capacity/charge
+// values recalculated as necessary to be returned in mW(/h) units.
+//
+// Currently supported systems:
+//  Linux 2.6.39+
+//  OS X 10.10+
+//  Windows XP+
+//  FreeBSD
+//  DragonFlyBSD
+//  NetBSD
 package battery
 
 import "fmt"
 
+// State type enumerates possible battery states.
 type State int
 
 const (
@@ -48,18 +61,32 @@ func newState(name string) (State, error) {
 	return Unknown, fmt.Errorf("Invalid state `%s`", name)
 }
 
+// Battery type represents a single battery entry information.
 type Battery struct {
-	State      State
-	Current    float64
-	Full       float64
-	Design     float64
+	// Current battery state.
+	State State
+	// Current (momentary) capacity (in mWh).
+	Current float64
+	// Last known full capacity (in mWh).
+	Full float64
+	// Reported design capacity (in mWh).
+	Design float64
+	// Current (momentary) charge rate (in mW).
+	// It is always non-negative, consult .State field to check
+	// whether it means charging or discharging.
 	ChargeRate float64
 }
 
+// Get returns battery information for given index.
+//
+// Note that index taken here is normalized, such that GetAll()[idx] == Get(idx).
+// It does not necessarily represent the "name" or "position" a battery was given
+// by the underling system.
 func Get(idx int) (*Battery, error) {
 	return get(idx)
 }
 
+// GetAll returns information about all batteries in the system.
 func GetAll() ([]*Battery, error) {
 	return getAll()
 }
