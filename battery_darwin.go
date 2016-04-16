@@ -83,7 +83,7 @@ func get(idx int) (*Battery, error) {
 	}
 
 	if idx >= len(batteries) {
-		return nil, NotFoundError{}
+		return nil, NotFoundError
 	}
 	return convertBattery(batteries[idx]), nil
 }

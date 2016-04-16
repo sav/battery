@@ -156,7 +156,7 @@ func get(idx int) (*Battery, error) {
 
 	keys := sortFilterProps(props)
 	if idx >= len(keys) {
-		return nil, NotFoundError{}
+		return nil, NotFoundError
 	}
 	return convertBattery(props[keys[idx]]), nil
 }

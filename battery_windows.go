@@ -157,7 +157,7 @@ func get(idx int) (*Battery, error) {
 		0,
 	)
 	if errno == 259 { //ERROR_NO_MORE_ITEMS
-		return nil, NotFoundError{}
+		return nil, NotFoundError
 	}
 	if errno != 0 {
 		return nil, FatalError{Err: errno}
