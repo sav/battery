@@ -151,12 +151,12 @@ func convertBattery(prop prop) *Battery {
 func get(idx int) (*Battery, error) {
 	props, err := readProps()
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 
 	keys := sortFilterProps(props)
 	if idx >= len(keys) {
-		return nil, NotFoundError
+		return nil, ErrNotFound
 	}
 	return convertBattery(props[keys[idx]]), nil
 }
@@ -164,7 +164,7 @@ func get(idx int) (*Battery, error) {
 func getAll() ([]*Battery, error) {
 	props, err := readProps()
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 
 	keys := sortFilterProps(props)
@@ -174,8 +174,5 @@ func getAll() ([]*Battery, error) {
 		batteries[i] = convertBattery(props[key])
 	}
 
-	if errors.Nil() {
-		return batteries, nil
-	}
 	return batteries, errors
 }

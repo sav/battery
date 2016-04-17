@@ -140,7 +140,7 @@ func get(idx int) (*Battery, error) {
 		0, 0,
 	)
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 	defer syscall.Syscall(setupDiDestroyDeviceInfoList.Addr(), 1, hdev, 0, 0)
 
@@ -157,10 +157,10 @@ func get(idx int) (*Battery, error) {
 		0,
 	)
 	if errno == 259 { //ERROR_NO_MORE_ITEMS
-		return nil, NotFoundError
+		return nil, ErrNotFound
 	}
 	if errno != 0 {
-		return nil, FatalError{Err: errno}
+		return nil, ErrFatal{Err: errno}
 	}
 	var cbRequired uint32
 	errno = setupDiCall(
@@ -174,7 +174,7 @@ func get(idx int) (*Battery, error) {
 		0,
 	)
 	if errno != 0 && errno != 122 { // ERROR_INSUFFICIENT_BUFFER
-		return nil, FatalError{Err: errno}
+		return nil, ErrFatal{Err: errno}
 	}
 	// The god damn struct with ANYSIZE_ARRAY of utf16 in it is crazy.
 	// So... let's emulate it with array of uint16 ;-D.
@@ -197,7 +197,7 @@ func get(idx int) (*Battery, error) {
 		0,
 	)
 	if errno != 0 {
-		return nil, FatalError{Err: errno}
+		return nil, ErrFatal{Err: errno}
 	}
 	devicePath := &didd[2:][0]
 
@@ -211,7 +211,7 @@ func get(idx int) (*Battery, error) {
 		0,
 	)
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 	defer windows.CloseHandle(handle)
 
@@ -230,14 +230,14 @@ func get(idx int) (*Battery, error) {
 		nil,
 	)
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 	if bqi.BatteryTag == 0 {
-		return nil, FatalError{Err: errors.New("BatteryTag not returned")}
+		return nil, ErrFatal{Err: errors.New("BatteryTag not returned")}
 	}
 
 	b := &Battery{}
-	e := PartialError{}
+	e := ErrPartial{}
 
 	var bi batteryInformation
 	err = windows.DeviceIoControl(
@@ -291,9 +291,6 @@ func get(idx int) (*Battery, error) {
 		e.State = err
 	}
 
-	if e.Nil() {
-		return b, nil
-	}
 	return b, e
 }
 
@@ -302,14 +299,11 @@ func getAll() ([]*Battery, error) {
 	var errors Errors
 	for i := 0; ; i++ {
 		b, err := get(i)
-		if _, ok := err.(NotFoundError); ok {
+		if err == ErrNotFound {
 			break
 		}
 		batteries = append(batteries, b)
 		errors = append(errors, err)
-	}
-	if errors.Nil() {
-		return batteries, nil
 	}
 	return batteries, errors
 }

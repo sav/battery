@@ -73,7 +73,7 @@ func getBatteryFiles() ([]string, error) {
 
 func getByPath(path string) (*Battery, error) {
 	b := &Battery{}
-	e := PartialError{}
+	e := ErrPartial{}
 	b.Current, e.Current = readFloat(path, "energy_now")
 	if os.IsNotExist(e.Current) {
 		// Get voltage (now always, or now and design?),
@@ -101,20 +101,17 @@ func getByPath(path string) (*Battery, error) {
 		e.State = err
 	}
 
-	if e.Nil() {
-		return b, nil
-	}
 	return b, e
 }
 
 func get(idx int) (*Battery, error) {
 	bFiles, err := getBatteryFiles()
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 
 	if idx >= len(bFiles) {
-		return nil, NotFoundError
+		return nil, ErrNotFound
 	}
 	return getByPath(bFiles[idx])
 }
@@ -122,7 +119,7 @@ func get(idx int) (*Battery, error) {
 func getAll() ([]*Battery, error) {
 	bFiles, err := getBatteryFiles()
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 
 	batteries := make([]*Battery, len(bFiles))
@@ -133,8 +130,5 @@ func getAll() ([]*Battery, error) {
 		errors[i] = err
 	}
 
-	if errors.Nil() {
-		return batteries, nil
-	}
 	return batteries, errors
 }

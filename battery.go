@@ -83,10 +83,23 @@ type Battery struct {
 // It does not necessarily represent the "name" or "position" a battery was given
 // by the underling system.
 func Get(idx int) (*Battery, error) {
-	return get(idx)
+	b, err := get(idx)
+	if perr, ok := err.(ErrPartial); ok {
+		if perr.isNil() {
+			return b, nil
+		}
+		if perr.noNil() {
+			return b, ErrFatal{Err: fmt.Errorf("All fields had not nil errors")}
+		}
+	}
+	return b, err
 }
 
 // GetAll returns information about all batteries in the system.
 func GetAll() ([]*Battery, error) {
-	return getAll()
+	bs, err := getAll()
+	if perr, ok := err.(Errors); ok && perr.isNil() {
+		return bs, nil
+	}
+	return bs, err
 }

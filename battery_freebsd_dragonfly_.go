@@ -53,12 +53,12 @@ func ioctl_(fd int, nr int64, retptr *[164]byte) error {
 func get(idx int) (*Battery, error) {
 	fd, err := unix.Open("/dev/acpi", unix.O_RDONLY, 0777)
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 	defer unix.Close(fd)
 
 	b := &Battery{}
-	e := PartialError{}
+	e := ErrPartial{}
 	var mw bool
 
 	// No unions in Go, so lets "emulate" union with byte array ;-].
@@ -68,7 +68,7 @@ func get(idx int) (*Battery, error) {
 	*unit = idx
 	err = ioctl_(fd, 0x10, &retptr) // ACPIIO_BATT_GET_BIF
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 	mw = readUint32(retptr[0:4]) == 0 // acpi_bif.units
 
@@ -77,7 +77,7 @@ func get(idx int) (*Battery, error) {
 	if !mw {
 		volts, err := uint32ToFloat64(readUint32(retptr[16:20])) // acpi_bif.dvol
 		if err != nil {
-			return nil, FatalError{Err: err}
+			return nil, ErrFatal{Err: err}
 		}
 		b.Design *= volts
 		b.Full *= volts
@@ -117,9 +117,6 @@ func get(idx int) (*Battery, error) {
 		e.Current = err
 	}
 
-	if e.Nil() {
-		return b, nil
-	}
 	return b, e
 }
 
@@ -133,11 +130,11 @@ loop:
 	for i := 0; ; i++ {
 		b, err := get(i)
 		switch perr := err.(type) {
-		case PartialError:
-			if perr.NoNil() {
+		case ErrPartial:
+			if perr.noNil() {
 				break loop
 			}
-		case FatalError:
+		case ErrFatal:
 			if errno, ok := perr.Err.(syscall.Errno); ok && errno == 6 {
 				break loop
 			}
@@ -146,8 +143,5 @@ loop:
 		errors = append(errors, err)
 	}
 
-	if errors.Nil() {
-		return batteries, nil
-	}
 	return batteries, errors
 }

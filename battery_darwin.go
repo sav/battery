@@ -79,11 +79,11 @@ func convertBattery(battery *battery) *Battery {
 func get(idx int) (*Battery, error) {
 	batteries, err := readBatteries()
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 
 	if idx >= len(batteries) {
-		return nil, NotFoundError
+		return nil, ErrNotFound
 	}
 	return convertBattery(batteries[idx]), nil
 }
@@ -91,7 +91,7 @@ func get(idx int) (*Battery, error) {
 func getAll() ([]*Battery, error) {
 	_batteries, err := readBatteries()
 	if err != nil {
-		return nil, FatalError{Err: err}
+		return nil, ErrFatal{Err: err}
 	}
 
 	batteries := make([]*Battery, len(_batteries))

@@ -23,17 +23,36 @@ package battery
 
 import "fmt"
 
-var NotFoundError = fmt.Errorf("Not found")
+// ErrNotFound variable represents battery not found error.
+//
+// Can only possibly be returned by Get() call.
+var ErrNotFound = fmt.Errorf("Not found")
 
-type FatalError struct {
-	Err error
+// ErrFatal type represents a fatal error.
+//
+// It indicates that either the library was not able to perform some kind
+// of operation critical to retrieving any data, or all partials have failed at
+// once (which would be equivalent to returning a PartialError with no nils).
+//
+// As such, the caller should assume that no meaningful data was
+// returned alongside the error and act accordingly.
+type ErrFatal struct {
+	Err error // The actual error that happened.
 }
 
-func (f FatalError) Error() string {
+func (f ErrFatal) Error() string {
 	return fmt.Sprintf("Could not retrieve battery info: `%s`", f.Err)
 }
 
-type PartialError struct {
+// ErrPartial type represents a partial error.
+//
+// It indicates that there were problems retrieving some of the data,
+// but some was also retrieved successfully.
+// If there would be all nils, nil is returned instead.
+// If there would be all not nils, FatalError is returned instead.
+//
+// The fields represent fields in the Battery type.
+type ErrPartial struct {
 	State      error
 	Current    error
 	Full       error
@@ -41,7 +60,7 @@ type PartialError struct {
 	ChargeRate error
 }
 
-func (p PartialError) Error() string {
+func (p ErrPartial) Error() string {
 	errors := map[string]error{
 		"State":      p.State,
 		"Current":    p.Current,
@@ -58,7 +77,7 @@ func (p PartialError) Error() string {
 	return s
 }
 
-func (p PartialError) Nil() bool {
+func (p ErrPartial) isNil() bool {
 	return p.State == nil &&
 		p.Current == nil &&
 		p.Full == nil &&
@@ -66,7 +85,7 @@ func (p PartialError) Nil() bool {
 		p.ChargeRate == nil
 }
 
-func (p PartialError) NoNil() bool {
+func (p ErrPartial) noNil() bool {
 	return p.State != nil &&
 		p.Current != nil &&
 		p.Full != nil &&
@@ -74,6 +93,9 @@ func (p PartialError) NoNil() bool {
 		p.ChargeRate != nil
 }
 
+// Errors type represents an array of either FatalError or PartialError.
+//
+// Can only possibly be returned by GetAll() call.
 type Errors []error
 
 func (e Errors) Error() string {
@@ -84,13 +106,13 @@ func (e Errors) Error() string {
 	return s
 }
 
-func (e Errors) Nil() bool {
+func (e Errors) isNil() bool {
 	for _, err := range e {
 		switch terr := err.(type) {
-		case FatalError:
+		case ErrFatal:
 			return false
-		case PartialError:
-			if !terr.Nil() {
+		case ErrPartial:
+			if !terr.isNil() {
 				return false
 			}
 		default:
