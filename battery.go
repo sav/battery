@@ -22,7 +22,7 @@
 // Package battery provides cross-platform, normalized battery information.
 //
 // Gives access to a system independent, typed battery state and capacity/charge
-// values recalculated as necessary to be returned in mW(/h) units.
+// values recalculated as necessary to be returned in mW(h) units.
 //
 // Currently supported systems:
 //  Linux 2.6.39+
@@ -81,7 +81,9 @@ type Battery struct {
 //
 // Note that index taken here is normalized, such that GetAll()[idx] == Get(idx).
 // It does not necessarily represent the "name" or "position" a battery was given
-// by the underling system.
+// by the underlying system.
+//
+// If error != nil, it will be either ErrFatal or ErrPartial.
 func Get(idx int) (*Battery, error) {
 	b, err := get(idx)
 	if perr, ok := err.(ErrPartial); ok {
@@ -96,6 +98,9 @@ func Get(idx int) (*Battery, error) {
 }
 
 // GetAll returns information about all batteries in the system.
+//
+// If error != nil, it will be either ErrFatal or Errors.
+// If error is of type Errors, it is guaranteed that length of both returned slices is the same and that i-th error coresponds with i-th battery structure.
 func GetAll() ([]*Battery, error) {
 	bs, err := getAll()
 	if perr, ok := err.(Errors); ok && perr.isNil() {

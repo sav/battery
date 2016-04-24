@@ -76,8 +76,6 @@ func getByPath(path string) (*Battery, error) {
 	e := ErrPartial{}
 	b.Current, e.Current = readFloat(path, "energy_now")
 	if os.IsNotExist(e.Current) {
-		// Get voltage (now always, or now and design?),
-		// get charge_full, etc., calculate...
 		volts, err := readFloat(path, "voltage_now")
 		if err == nil {
 			volts /= 1000000
