@@ -148,10 +148,10 @@ func convertBattery(prop prop) *Battery {
 	return battery
 }
 
-func get(idx int) (*Battery, error) {
+func systemGet(idx int) (*Battery, error) {
 	props, err := readProps()
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 
 	keys := sortFilterProps(props)
@@ -161,10 +161,10 @@ func get(idx int) (*Battery, error) {
 	return convertBattery(props[keys[idx]]), nil
 }
 
-func getAll() ([]*Battery, error) {
+func systemGetAll() ([]*Battery, error) {
 	props, err := readProps()
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 
 	keys := sortFilterProps(props)

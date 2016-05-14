@@ -29,7 +29,6 @@ import (
 )
 
 type battery struct {
-	Location          int
 	Voltage           int
 	CurrentCapacity   int
 	MaxCapacity       int
@@ -76,10 +75,10 @@ func convertBattery(battery *battery) *Battery {
 	return b
 }
 
-func get(idx int) (*Battery, error) {
+func systemGet(idx int) (*Battery, error) {
 	batteries, err := readBatteries()
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 
 	if idx >= len(batteries) {
@@ -88,10 +87,10 @@ func get(idx int) (*Battery, error) {
 	return convertBattery(batteries[idx]), nil
 }
 
-func getAll() ([]*Battery, error) {
+func systemGetAll() ([]*Battery, error) {
 	_batteries, err := readBatteries()
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 
 	batteries := make([]*Battery, len(_batteries))

@@ -102,10 +102,10 @@ func getByPath(path string) (*Battery, error) {
 	return b, e
 }
 
-func get(idx int) (*Battery, error) {
+func systemGet(idx int) (*Battery, error) {
 	bFiles, err := getBatteryFiles()
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 
 	if idx >= len(bFiles) {
@@ -114,10 +114,10 @@ func get(idx int) (*Battery, error) {
 	return getByPath(bFiles[idx])
 }
 
-func getAll() ([]*Battery, error) {
+func systemGetAll() ([]*Battery, error) {
 	bFiles, err := getBatteryFiles()
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 
 	batteries := make([]*Battery, len(bFiles))

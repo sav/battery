@@ -23,12 +23,95 @@ package battery
 
 import (
 	"fmt"
-
-	"github.com/distatus/battery"
+	"reflect"
+	"testing"
 )
 
+func TestGet(t *testing.T) {
+	cases := []struct {
+		batteryIn  *Battery
+		errorIn    error
+		batteryOut *Battery
+		errorOut   error
+	}{{
+		&Battery{Full: 1}, nil,
+		&Battery{Full: 1}, nil,
+	}, {
+		nil, fmt.Errorf("t1"),
+		nil, ErrFatal{fmt.Errorf("t1")},
+	}, {
+		&Battery{Full: 2}, ErrPartial{Current: fmt.Errorf("t2")},
+		&Battery{Full: 2}, ErrPartial{Current: fmt.Errorf("t2")},
+	}, {
+		&Battery{Full: 3}, ErrPartial{},
+		&Battery{Full: 3}, nil,
+	}, {
+		nil, ErrPartial{State: fmt.Errorf("t3"), Current: fmt.Errorf("t4"), Full: fmt.Errorf("t5"), Design: fmt.Errorf("t6"), ChargeRate: fmt.Errorf("t7")},
+		nil, ErrFatal{ErrAllNotNil},
+	}}
+
+	for i, c := range cases {
+		f := func(idx int) (*Battery, error) {
+			return c.batteryIn, c.errorIn
+		}
+
+		battery, err := get(f, 0)
+
+		if !reflect.DeepEqual(battery, c.batteryOut) {
+			t.Errorf("%d: %v != %v", i, battery, c.batteryOut)
+		}
+		if !reflect.DeepEqual(err, c.errorOut) {
+			t.Errorf("%d: %v != %v", i, err, c.errorOut)
+		}
+	}
+}
+
+func TestGetAll(t *testing.T) {
+	cases := []struct {
+		batteriesIn  []*Battery
+		errorsIn     error
+		batteriesOut []*Battery
+		errorsOut    error
+	}{{
+		[]*Battery{{Full: 1}}, nil,
+		[]*Battery{{Full: 1}}, nil,
+	}, {
+		[]*Battery{}, fmt.Errorf("t1"),
+		[]*Battery{}, ErrFatal{fmt.Errorf("t1")},
+	}, {
+		[]*Battery{{Full: 2}, {Full: 3}}, Errors{ErrPartial{}, ErrPartial{}},
+		[]*Battery{{Full: 2}, {Full: 3}}, nil,
+	}, {
+		[]*Battery{{Full: 4}, {Full: 5}}, Errors{ErrPartial{State: fmt.Errorf("t2"), Current: fmt.Errorf("t3"), Full: fmt.Errorf("t4"), Design: fmt.Errorf("t5"), ChargeRate: fmt.Errorf("t6")}, ErrPartial{State: fmt.Errorf("t7"), Current: fmt.Errorf("t8"), Full: fmt.Errorf("t9"), Design: fmt.Errorf("t10"), ChargeRate: fmt.Errorf("t11")}},
+		nil, ErrFatal{ErrAllNotNil},
+	}, {
+		[]*Battery{{Full: 6}, {Full: 7}}, Errors{ErrPartial{State: fmt.Errorf("t12")}, fmt.Errorf("t13")},
+		[]*Battery{{Full: 6}, {Full: 7}}, Errors{ErrPartial{State: fmt.Errorf("t12")}, ErrFatal{fmt.Errorf("t13")}},
+	}, {
+		[]*Battery{{}, {Full: 8}}, Errors{ErrPartial{State: fmt.Errorf("t14"), Current: fmt.Errorf("t15"), Full: fmt.Errorf("t16"), Design: fmt.Errorf("t17"), ChargeRate: fmt.Errorf("t18")}, nil},
+		[]*Battery{{}, {Full: 8}}, Errors{ErrFatal{ErrAllNotNil}, nil},
+	}, {
+		[]*Battery{{Full: 9}, {Full: 10}}, Errors{ErrPartial{}, fmt.Errorf("t19")},
+		[]*Battery{{Full: 9}, {Full: 10}}, Errors{nil, ErrFatal{fmt.Errorf("t19")}},
+	}}
+
+	for i, c := range cases {
+		f := func() ([]*Battery, error) {
+			return c.batteriesIn, c.errorsIn
+		}
+		batteries, err := getAll(f)
+
+		if !reflect.DeepEqual(batteries, c.batteriesOut) {
+			t.Errorf("%d: %v != %v", i, batteries, c.batteriesOut)
+		}
+		if !reflect.DeepEqual(err, c.errorsOut) {
+			t.Errorf("%d: %v != %v", i, err, c.errorsOut)
+		}
+	}
+}
+
 func ExampleGetAll() {
-	batteries, err := battery.GetAll()
+	batteries, err := GetAll()
 	if err != nil {
 		fmt.Println("Could not get batteries info")
 		return
@@ -45,7 +128,7 @@ func ExampleGetAll() {
 }
 
 func ExampleGetAll_errors() {
-	batteries, err := battery.GetAll()
+	_, err := GetAll()
 	if err == nil {
 		fmt.Println("Got batteries info")
 		return
@@ -67,13 +150,13 @@ func ExampleGetAll_errors() {
 }
 
 func ExampleGet() {
-	battery, err := battery.Get(0)
+	battery, err := Get(0)
 	if err != nil {
 		fmt.Println("Could not get battery info")
 		return
 	}
 
-	fmt.Printf("Bat%d: ", i)
+	fmt.Printf("Bat%d: ", 0)
 	fmt.Printf("state: %f, ", battery.State)
 	fmt.Printf("current capacity: %f mWh, ", battery.Current)
 	fmt.Printf("last full capacity: %f mWh, ", battery.Full)
@@ -82,7 +165,7 @@ func ExampleGet() {
 }
 
 func ExampleGet_errors() {
-	battery, err := battery.Get(0)
+	_, err := Get(0)
 	if err == nil {
 		fmt.Println("Got battery info")
 		return

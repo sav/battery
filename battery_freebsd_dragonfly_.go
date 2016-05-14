@@ -50,10 +50,10 @@ func ioctl_(fd int, nr int64, retptr *[164]byte) error {
 	return ioctl(fd, nr, 'B', unsafe.Sizeof(*retptr), unsafe.Pointer(retptr))
 }
 
-func get(idx int) (*Battery, error) {
+func systemGet(idx int) (*Battery, error) {
 	fd, err := unix.Open("/dev/acpi", unix.O_RDONLY, 0777)
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 	defer unix.Close(fd)
 
@@ -68,7 +68,7 @@ func get(idx int) (*Battery, error) {
 	*unit = idx
 	err = ioctl_(fd, 0x10, &retptr) // ACPIIO_BATT_GET_BIF
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 	mw = readUint32(retptr[0:4]) == 0 // acpi_bif.units
 
@@ -77,7 +77,7 @@ func get(idx int) (*Battery, error) {
 	if !mw {
 		volts, err := uint32ToFloat64(readUint32(retptr[16:20])) // acpi_bif.dvol
 		if err != nil {
-			return nil, ErrFatal{Err: err}
+			return nil, err
 		}
 		b.Design *= volts
 		b.Full *= volts
@@ -123,21 +123,16 @@ func get(idx int) (*Battery, error) {
 // There is no way to iterate over available batteries.
 // Therefore we assume here that if we were not able to retrieve
 // anything, it means we're done.
-func getAll() ([]*Battery, error) {
+func systemGetAll() ([]*Battery, error) {
 	var batteries []*Battery
 	var errors Errors
-loop:
 	for i := 0; ; i++ {
-		b, err := get(i)
-		switch perr := err.(type) {
-		case ErrPartial:
-			if perr.noNil() {
-				break loop
-			}
-		case ErrFatal:
-			if errno, ok := perr.Err.(syscall.Errno); ok && errno == 6 {
-				break loop
-			}
+		b, err := systemGet(i)
+		if perr, ok := err.(ErrPartial); ok && perr.noNil() {
+			break
+		}
+		if errno, ok := err.(syscall.Errno); ok && errno == 6 {
+			break
 		}
 		batteries = append(batteries, b)
 		errors = append(errors, err)

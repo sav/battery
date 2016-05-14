@@ -77,6 +77,15 @@ type Battery struct {
 	ChargeRate float64
 }
 
+func (b *Battery) String() string {
+	return fmt.Sprintf("%+v", *b)
+}
+
+func get(sg func(idx int) (*Battery, error), idx int) (*Battery, error) {
+	b, err := sg(idx)
+	return b, wrapError(err)
+}
+
 // Get returns battery information for given index.
 //
 // Note that index taken here is normalized, such that GetAll()[idx] == Get(idx).
@@ -85,16 +94,36 @@ type Battery struct {
 //
 // If error != nil, it will be either ErrFatal or ErrPartial.
 func Get(idx int) (*Battery, error) {
-	b, err := get(idx)
-	if perr, ok := err.(ErrPartial); ok {
-		if perr.isNil() {
-			return b, nil
+	return get(systemGet, idx)
+}
+
+func getAll(sg func() ([]*Battery, error)) ([]*Battery, error) {
+	bs, err := sg()
+	if errors, ok := err.(Errors); ok {
+		nils := 0
+		partials := 0
+		for i, err := range errors {
+			err = wrapError(err)
+			if err == nil {
+				nils += 1
+			}
+			if _, ok := err.(ErrPartial); ok {
+				partials += 1
+			}
+			errors[i] = err
 		}
-		if perr.noNil() {
-			return b, ErrFatal{Err: fmt.Errorf("All fields had not nil errors")}
+		if nils == len(errors) {
+			return bs, nil
 		}
+		if nils > 0 || partials > 0 {
+			return bs, errors
+		}
+		return nil, ErrFatal{ErrAllNotNil}
 	}
-	return b, err
+	if err != nil {
+		return bs, ErrFatal{err}
+	}
+	return bs, nil
 }
 
 // GetAll returns information about all batteries in the system.
@@ -102,9 +131,5 @@ func Get(idx int) (*Battery, error) {
 // If error != nil, it will be either ErrFatal or Errors.
 // If error is of type Errors, it is guaranteed that length of both returned slices is the same and that i-th error coresponds with i-th battery structure.
 func GetAll() ([]*Battery, error) {
-	bs, err := getAll()
-	if perr, ok := err.(Errors); ok && perr.isNil() {
-		return bs, nil
-	}
-	return bs, err
+	return getAll(systemGetAll)
 }

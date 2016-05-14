@@ -25,8 +25,14 @@ import "fmt"
 
 // ErrNotFound variable represents battery not found error.
 //
-// Can only possibly be returned by Get() call.
+// Only ever returned wrapped in ErrFatal.
 var ErrNotFound = fmt.Errorf("Not found")
+
+// ErrAllNotNil variable says that backend returns ErrPartial with
+// all fields having not nil values, hence it was converted to ErrFatal.
+//
+// Only ever returned wrapped in ErrFatal.
+var ErrAllNotNil = fmt.Errorf("All fields had not nil errors")
 
 // ErrFatal type represents a fatal error.
 //
@@ -68,13 +74,15 @@ func (p ErrPartial) Error() string {
 		"Design":     p.Design,
 		"ChargeRate": p.ChargeRate,
 	}
-	s := ""
-	for name, err := range errors {
+	keys := []string{"State", "Current", "Full", "Design", "ChargeRate"}
+	s := "{"
+	for _, name := range keys {
+		err := errors[name]
 		if err != nil {
-			s += fmt.Sprintf("%s: %s\n", name, err.Error())
+			s += fmt.Sprintf("%s:%s ", name, err.Error())
 		}
 	}
-	return s
+	return s[:len(s)-1] + "}"
 }
 
 func (p ErrPartial) isNil() bool {
@@ -93,33 +101,34 @@ func (p ErrPartial) noNil() bool {
 		p.ChargeRate != nil
 }
 
-// Errors type represents an array of either FatalError or PartialError.
+// Errors type represents an array of FatalError, PartialError or nil values.
 //
 // Can only possibly be returned by GetAll() call.
 type Errors []error
 
 func (e Errors) Error() string {
-	s := ""
+	s := "["
 	for _, err := range e {
-		s += err.Error()
+		if err != nil {
+			s += err.Error() + " "
+		}
 	}
+	s = s[:len(s)-1] + "]"
 	return s
 }
 
-func (e Errors) isNil() bool {
-	for _, err := range e {
-		switch terr := err.(type) {
-		case ErrFatal:
-			return false
-		case ErrPartial:
-			if !terr.isNil() {
-				return false
-			}
-		default:
-			if terr != nil {
-				return false
-			}
+func wrapError(err error) error {
+	if perr, ok := err.(ErrPartial); ok {
+		if perr.isNil() {
+			return nil
 		}
+		if perr.noNil() {
+			return ErrFatal{ErrAllNotNil}
+		}
+		return perr
 	}
-	return true
+	if err != nil {
+		return ErrFatal{err}
+	}
+	return nil
 }

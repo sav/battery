@@ -129,7 +129,7 @@ var setupDiEnumDeviceInterfaces = setupapi.NewProc("SetupDiEnumDeviceInterfaces"
 var setupDiGetDeviceInterfaceDetailW = setupapi.NewProc("SetupDiGetDeviceInterfaceDetailW")
 var setupDiDestroyDeviceInfoList = setupapi.NewProc("SetupDiDestroyDeviceInfoList")
 
-func get(idx int) (*Battery, error) {
+func systemGet(idx int) (*Battery, error) {
 	hdev, err := setupDiSetup(
 		setupDiGetClassDevsW,
 		4,
@@ -140,7 +140,7 @@ func get(idx int) (*Battery, error) {
 		0, 0,
 	)
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 	defer syscall.Syscall(setupDiDestroyDeviceInfoList.Addr(), 1, hdev, 0, 0)
 
@@ -160,7 +160,7 @@ func get(idx int) (*Battery, error) {
 		return nil, ErrNotFound
 	}
 	if errno != 0 {
-		return nil, ErrFatal{Err: errno}
+		return nil, errno
 	}
 	var cbRequired uint32
 	errno = setupDiCall(
@@ -174,7 +174,7 @@ func get(idx int) (*Battery, error) {
 		0,
 	)
 	if errno != 0 && errno != 122 { // ERROR_INSUFFICIENT_BUFFER
-		return nil, ErrFatal{Err: errno}
+		return nil, errno
 	}
 	// The god damn struct with ANYSIZE_ARRAY of utf16 in it is crazy.
 	// So... let's emulate it with array of uint16 ;-D.
@@ -197,7 +197,7 @@ func get(idx int) (*Battery, error) {
 		0,
 	)
 	if errno != 0 {
-		return nil, ErrFatal{Err: errno}
+		return nil, errno
 	}
 	devicePath := &didd[2:][0]
 
@@ -211,7 +211,7 @@ func get(idx int) (*Battery, error) {
 		0,
 	)
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 	defer windows.CloseHandle(handle)
 
@@ -230,10 +230,10 @@ func get(idx int) (*Battery, error) {
 		nil,
 	)
 	if err != nil {
-		return nil, ErrFatal{Err: err}
+		return nil, err
 	}
 	if bqi.BatteryTag == 0 {
-		return nil, ErrFatal{Err: errors.New("BatteryTag not returned")}
+		return nil, errors.New("BatteryTag not returned")
 	}
 
 	b := &Battery{}
@@ -294,11 +294,11 @@ func get(idx int) (*Battery, error) {
 	return b, e
 }
 
-func getAll() ([]*Battery, error) {
+func systemGetAll() ([]*Battery, error) {
 	var batteries []*Battery
 	var errors Errors
 	for i := 0; ; i++ {
-		b, err := get(i)
+		b, err := systemGet(i)
 		if err == ErrNotFound {
 			break
 		}
