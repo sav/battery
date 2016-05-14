@@ -1,4 +1,4 @@
-battery [![Go Report Card](https://goreportcard.com/badge/github.com/distatus/battery)](https://goreportcard.com/report/github.com/distatus/battery) [![GoDoc](https://godoc.org/github.com/distatus/battery?status.svg)](https://godoc.org/github.com/distatus/battery)
+battery [![Build Status](https://travis-ci.org/distatus/battery.svg?branch=master)](https://travis-ci.org/distatus/battery) [![Go Report Card](https://goreportcard.com/badge/github.com/distatus/battery)](https://goreportcard.com/report/github.com/distatus/battery) [![GoDoc](https://godoc.org/github.com/distatus/battery?status.svg)](https://godoc.org/github.com/distatus/battery)
 =======
 
 Cross-platform, normalized battery information library.

@@ -67,6 +67,9 @@ type ErrPartial struct {
 }
 
 func (p ErrPartial) Error() string {
+	if p.isNil() {
+		return "{}"
+	}
 	errors := map[string]error{
 		"State":      p.State,
 		"Current":    p.Current,
@@ -113,8 +116,10 @@ func (e Errors) Error() string {
 			s += err.Error() + " "
 		}
 	}
-	s = s[:len(s)-1] + "]"
-	return s
+	if len(s) > 1 {
+		s = s[:len(s)-1]
+	}
+	return s + "]"
 }
 
 func wrapError(err error) error {

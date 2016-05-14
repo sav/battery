@@ -119,7 +119,7 @@ func ExampleGetAll() {
 
 	for i, battery := range batteries {
 		fmt.Printf("Bat%d: ", i)
-		fmt.Printf("state: %f, ", battery.State)
+		fmt.Printf("state: %s, ", battery.State)
 		fmt.Printf("current capacity: %f mWh, ", battery.Current)
 		fmt.Printf("last full capacity: %f mWh, ", battery.Full)
 		fmt.Printf("design capacity: %f mWh, ", battery.Design)
@@ -157,7 +157,7 @@ func ExampleGet() {
 	}
 
 	fmt.Printf("Bat%d: ", 0)
-	fmt.Printf("state: %f, ", battery.State)
+	fmt.Printf("state: %s, ", battery.State)
 	fmt.Printf("current capacity: %f mWh, ", battery.Current)
 	fmt.Printf("last full capacity: %f mWh, ", battery.Full)
 	fmt.Printf("design capacity: %f mWh, ", battery.Design)
