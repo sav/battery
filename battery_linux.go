@@ -79,6 +79,7 @@ func getByPath(path string) (*Battery, error) {
 		volts, err := readFloat(path, "voltage_now")
 		if err == nil {
 			volts /= 1000000
+			b.Current, e.Current = readAmp(path, "charge_now", volts)
 			b.Full, e.Full = readAmp(path, "charge_full", volts)
 			b.Design, e.Design = readAmp(path, "charge_full_design", volts)
 			b.ChargeRate, e.ChargeRate = readAmp(path, "current_now", volts)
