@@ -23,6 +23,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/distatus/battery"
@@ -64,8 +65,12 @@ func printBattery(idx int, bat *battery.Battery) {
 func main() {
 	batteries, err := battery.GetAll()
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if len(batteries) == 0 {
+		fmt.Fprintln(os.Stderr, "No batteries")
+		os.Exit(1)
 	}
 	for i, bat := range batteries {
 		printBattery(i, bat)
