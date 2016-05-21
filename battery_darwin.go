@@ -45,6 +45,11 @@ func readBatteries() ([]*battery, error) {
 		return nil, err
 	}
 
+	if len(out) == 0 {
+		// No batteries.
+		return nil, nil
+	}
+
 	var data []*battery
 	if _, err = plist.Unmarshal(out, &data); err != nil {
 		return nil, err
