@@ -28,7 +28,7 @@ import "fmt"
 // Only ever returned wrapped in ErrFatal.
 var ErrNotFound = fmt.Errorf("Not found")
 
-// ErrAllNotNil variable says that backend returns ErrPartial with
+// ErrAllNotNil variable says that backend returned ErrPartial with
 // all fields having not nil values, hence it was converted to ErrFatal.
 //
 // Only ever returned wrapped in ErrFatal.
@@ -38,7 +38,7 @@ var ErrAllNotNil = fmt.Errorf("All fields had not nil errors")
 //
 // It indicates that either the library was not able to perform some kind
 // of operation critical to retrieving any data, or all partials have failed at
-// once (which would be equivalent to returning a PartialError with no nils).
+// once (which would be equivalent to returning a ErrPartial with no nils).
 //
 // As such, the caller should assume that no meaningful data was
 // returned alongside the error and act accordingly.
@@ -55,7 +55,7 @@ func (f ErrFatal) Error() string {
 // It indicates that there were problems retrieving some of the data,
 // but some was also retrieved successfully.
 // If there would be all nils, nil is returned instead.
-// If there would be all not nils, FatalError is returned instead.
+// If there would be all not nils, ErrFatal is returned instead.
 //
 // The fields represent fields in the Battery type.
 type ErrPartial struct {
@@ -104,7 +104,7 @@ func (p ErrPartial) noNil() bool {
 		p.ChargeRate != nil
 }
 
-// Errors type represents an array of FatalError, PartialError or nil values.
+// Errors type represents an array of ErrFatal, ErrPartial or nil values.
 //
 // Can only possibly be returned by GetAll() call.
 type Errors []error
