@@ -14,6 +14,7 @@ Currently supported systems:
 * FreeBSD
 * DragonFlyBSD
 * NetBSD
+* OpenBSD
 
 Installation
 ------------

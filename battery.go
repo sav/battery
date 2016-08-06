@@ -31,22 +31,26 @@
 //  FreeBSD
 //  DragonFlyBSD
 //  NetBSD
+//  OpenBSD
 package battery
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // State type enumerates possible battery states.
 type State int
 
 const (
-	Empty State = iota
+	Unknown State = iota
+	Empty
 	Full
 	Charging
 	Discharging
-	Unknown
 )
 
-var states = [...]string{"Empty", "Full", "Charging", "Discharging", "Unknown"}
+var states = [...]string{"Unknown", "Empty", "Full", "Charging", "Discharging"}
 
 func (s State) String() string {
 	return states[s]
@@ -54,7 +58,7 @@ func (s State) String() string {
 
 func newState(name string) (State, error) {
 	for i, state := range states {
-		if name == state {
+		if strings.ToLower(name) == strings.ToLower(state) {
 			return State(i), nil
 		}
 	}
