@@ -45,7 +45,7 @@ func readFloat(path, filename string) (float64, error) {
 func readAmp(path, filename string, volts float64) (float64, error) {
 	val, err := readFloat(path, filename)
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 	return val * volts, nil
 }
