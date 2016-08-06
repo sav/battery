@@ -76,11 +76,14 @@ func systemGet(idx int) (*Battery, error) {
 	b.Full, e.Full = uint32ToFloat64(readUint32(retptr[8:12]))    // acpi_bif.lfcap
 	if !mw {
 		volts, err := uint32ToFloat64(readUint32(retptr[16:20])) // acpi_bif.dvol
-		if err != nil {
-			return nil, err
+
+		if err == nil {
+			b.Design *= volts
+			b.Full *= volts
+		} else {
+			e.Design = err
+			e.Full = err
 		}
-		b.Design *= volts
-		b.Full *= volts
 	}
 
 	*unit = idx
@@ -103,13 +106,13 @@ func systemGet(idx int) (*Battery, error) {
 
 		if !mw {
 			volts, err := uint32ToFloat64(readUint32(retptr[12:16])) // acpi_bst.volt
-			if err != nil {
+			if err == nil {
+				b.ChargeRate *= volts
+				b.Current *= volts
+			} else {
 				e.ChargeRate = err
 				e.Current = err
 			}
-
-			b.ChargeRate *= volts
-			b.Current *= volts
 		}
 	} else {
 		e.State = err
