@@ -32,6 +32,7 @@
 //  DragonFlyBSD
 //  NetBSD
 //  OpenBSD
+//  Solaris
 package battery
 
 import (

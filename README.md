@@ -15,6 +15,7 @@ Currently supported systems:
 * DragonFlyBSD
 * NetBSD
 * OpenBSD
+* Solaris
 
 Installation
 ------------
