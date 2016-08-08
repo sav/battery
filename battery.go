@@ -51,7 +51,13 @@ const (
 	Discharging
 )
 
-var states = [...]string{"Unknown", "Empty", "Full", "Charging", "Discharging"}
+var states = [...]string{
+	Unknown:     "Unknown",
+	Empty:       "Empty",
+	Full:        "Full",
+	Charging:    "Charging",
+	Discharging: "Discharging",
+}
 
 func (s State) String() string {
 	return states[s]
@@ -59,7 +65,7 @@ func (s State) String() string {
 
 func newState(name string) (State, error) {
 	for i, state := range states {
-		if strings.ToLower(name) == strings.ToLower(state) {
+		if strings.EqualFold(name, state) {
 			return State(i), nil
 		}
 	}
