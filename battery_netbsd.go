@@ -51,11 +51,9 @@ type props map[string]prop
 
 func readBytes(ptr unsafe.Pointer, length uint64) []byte {
 	buf := make([]byte, length-1)
-	uiptr := uintptr(ptr)
 	var i uint64
 	for ; i < length-1; i++ {
-		buf[i] = *(*byte)(unsafe.Pointer(uiptr))
-		uiptr++
+		buf[i] = *(*byte)(unsafe.Pointer(uintptr(ptr) + uintptr(i)))
 	}
 	return buf
 }

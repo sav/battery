@@ -43,6 +43,9 @@ import (
 // State type enumerates possible battery states.
 type State int
 
+// Possible state values.
+// Unknown can mean either controller returned unknown, or
+// not able to retrieve state due to some error.
 const (
 	Unknown State = iota
 	Empty
@@ -116,10 +119,10 @@ func getAll(sg func() ([]*Battery, error)) ([]*Battery, error) {
 		for i, err := range errors {
 			err = wrapError(err)
 			if err == nil {
-				nils += 1
+				nils++
 			}
 			if _, ok := err.(ErrPartial); ok {
-				partials += 1
+				partials++
 			}
 			errors[i] = err
 		}
