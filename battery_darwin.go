@@ -25,7 +25,7 @@ import (
 	"math"
 	"os/exec"
 
-	"github.com/distatus/go-plist"
+	plist "github.com/DHowett/go-plist"
 )
 
 type battery struct {

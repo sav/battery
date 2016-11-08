@@ -27,7 +27,7 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/distatus/go-plist"
+	plist "github.com/DHowett/go-plist"
 
 	"golang.org/x/sys/unix"
 )
