@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -36,7 +36,7 @@ func printBattery(idx int, bat *battery.Battery) {
 		bat.State,
 		bat.Current/bat.Full*100,
 	)
-	defer fmt.Println()
+	defer fmt.Printf(" [Voltage: %.2fV (design: %.2fV)]\n", bat.Voltage, bat.DesignVoltage)
 
 	var str string
 	var timeNum float64

@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -59,11 +59,13 @@ func (f ErrFatal) Error() string {
 //
 // The fields represent fields in the Battery type.
 type ErrPartial struct {
-	State      error
-	Current    error
-	Full       error
-	Design     error
-	ChargeRate error
+	State         error
+	Current       error
+	Full          error
+	Design        error
+	ChargeRate    error
+	Voltage       error
+	DesignVoltage error
 }
 
 func (p ErrPartial) Error() string {
@@ -71,13 +73,15 @@ func (p ErrPartial) Error() string {
 		return "{}"
 	}
 	errors := map[string]error{
-		"State":      p.State,
-		"Current":    p.Current,
-		"Full":       p.Full,
-		"Design":     p.Design,
-		"ChargeRate": p.ChargeRate,
+		"State":         p.State,
+		"Current":       p.Current,
+		"Full":          p.Full,
+		"Design":        p.Design,
+		"ChargeRate":    p.ChargeRate,
+		"Voltage":       p.Voltage,
+		"DesignVoltage": p.DesignVoltage,
 	}
-	keys := []string{"State", "Current", "Full", "Design", "ChargeRate"}
+	keys := []string{"State", "Current", "Full", "Design", "ChargeRate", "Voltage", "DesignVoltage"}
 	s := "{"
 	for _, name := range keys {
 		err := errors[name]
@@ -93,7 +97,9 @@ func (p ErrPartial) isNil() bool {
 		p.Current == nil &&
 		p.Full == nil &&
 		p.Design == nil &&
-		p.ChargeRate == nil
+		p.ChargeRate == nil &&
+		p.Voltage == nil &&
+		p.DesignVoltage == nil
 }
 
 func (p ErrPartial) noNil() bool {
@@ -101,7 +107,9 @@ func (p ErrPartial) noNil() bool {
 		p.Current != nil &&
 		p.Full != nil &&
 		p.Design != nil &&
-		p.ChargeRate != nil
+		p.ChargeRate != nil &&
+		p.Voltage != nil &&
+		p.DesignVoltage != nil
 }
 
 // Errors type represents an array of ErrFatal, ErrPartial or nil values.

@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -69,7 +69,7 @@ func TestGet(t *testing.T) {
 		&Battery{Full: 3}, ErrPartial{},
 		&Battery{Full: 3}, nil,
 	}, {
-		nil, ErrPartial{State: fmt.Errorf("t3"), Current: fmt.Errorf("t4"), Full: fmt.Errorf("t5"), Design: fmt.Errorf("t6"), ChargeRate: fmt.Errorf("t7")},
+		nil, ErrPartial{State: fmt.Errorf("t3"), Current: fmt.Errorf("t4"), Full: fmt.Errorf("t5"), Design: fmt.Errorf("t6"), ChargeRate: fmt.Errorf("t7"), Voltage: fmt.Errorf("t8"), DesignVoltage: fmt.Errorf("t9")},
 		nil, ErrFatal{ErrAllNotNil},
 	}}
 
@@ -105,13 +105,13 @@ func TestGetAll(t *testing.T) {
 		[]*Battery{{Full: 2}, {Full: 3}}, Errors{ErrPartial{}, ErrPartial{}},
 		[]*Battery{{Full: 2}, {Full: 3}}, nil,
 	}, {
-		[]*Battery{{Full: 4}, {Full: 5}}, Errors{ErrPartial{State: fmt.Errorf("t2"), Current: fmt.Errorf("t3"), Full: fmt.Errorf("t4"), Design: fmt.Errorf("t5"), ChargeRate: fmt.Errorf("t6")}, ErrPartial{State: fmt.Errorf("t7"), Current: fmt.Errorf("t8"), Full: fmt.Errorf("t9"), Design: fmt.Errorf("t10"), ChargeRate: fmt.Errorf("t11")}},
+		[]*Battery{{Full: 4}, {Full: 5}}, Errors{ErrPartial{State: fmt.Errorf("t2"), Current: fmt.Errorf("t3"), Full: fmt.Errorf("t4"), Design: fmt.Errorf("t5"), ChargeRate: fmt.Errorf("t6"), Voltage: fmt.Errorf("t101"), DesignVoltage: fmt.Errorf("t102")}, ErrPartial{State: fmt.Errorf("t7"), Current: fmt.Errorf("t8"), Full: fmt.Errorf("t9"), Design: fmt.Errorf("t10"), ChargeRate: fmt.Errorf("t11"), Voltage: fmt.Errorf("t103"), DesignVoltage: fmt.Errorf("t104")}},
 		nil, ErrFatal{ErrAllNotNil},
 	}, {
 		[]*Battery{{Full: 6}, {Full: 7}}, Errors{ErrPartial{State: fmt.Errorf("t12")}, fmt.Errorf("t13")},
 		[]*Battery{{Full: 6}, {Full: 7}}, Errors{ErrPartial{State: fmt.Errorf("t12")}, ErrFatal{fmt.Errorf("t13")}},
 	}, {
-		[]*Battery{{}, {Full: 8}}, Errors{ErrPartial{State: fmt.Errorf("t14"), Current: fmt.Errorf("t15"), Full: fmt.Errorf("t16"), Design: fmt.Errorf("t17"), ChargeRate: fmt.Errorf("t18")}, nil},
+		[]*Battery{{}, {Full: 8}}, Errors{ErrPartial{State: fmt.Errorf("t14"), Current: fmt.Errorf("t15"), Full: fmt.Errorf("t16"), Design: fmt.Errorf("t17"), ChargeRate: fmt.Errorf("t18"), Voltage: fmt.Errorf("t105"), DesignVoltage: fmt.Errorf("t106")}, nil},
 		[]*Battery{{}, {Full: 8}}, Errors{ErrFatal{ErrAllNotNil}, nil},
 	}, {
 		[]*Battery{{Full: 9}, {Full: 10}}, Errors{ErrPartial{}, fmt.Errorf("t19")},

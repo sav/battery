@@ -89,6 +89,13 @@ type Battery struct {
 	// It is always non-negative, consult .State field to check
 	// whether it means charging or discharging.
 	ChargeRate float64
+	// Current voltage (in V).
+	Voltage float64
+	// Design voltage (in V).
+	// Some systems (e.g. macOS) do not provide a separate
+	// value for this. In such cases, this field will be
+	// set to the value of `Voltage` field, for convenience.
+	DesignVoltage float64
 }
 
 func (b *Battery) String() string {

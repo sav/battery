@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -36,7 +36,7 @@ func TestErrPartial(t *testing.T) {
 		{ErrPartial{}, "{}", true, false},
 		{ErrPartial{Full: errors.New("t1")}, "{Full:t1}", false, false},
 		{ErrPartial{State: errors.New("t2"), Full: errors.New("t3")}, "{State:t2 Full:t3}", false, false},
-		{ErrPartial{State: errors.New("t4"), Current: errors.New("t5"), Full: errors.New("t6"), Design: errors.New("t7"), ChargeRate: errors.New("t8")}, "{State:t4 Current:t5 Full:t6 Design:t7 ChargeRate:t8}", false, true},
+		{ErrPartial{State: errors.New("t4"), Current: errors.New("t5"), Full: errors.New("t6"), Design: errors.New("t7"), ChargeRate: errors.New("t8"), Voltage: errors.New("t9"), DesignVoltage: errors.New("t10")}, "{State:t4 Current:t5 Full:t6 Design:t7 ChargeRate:t8 Voltage:t9 DesignVoltage:t10}", false, true},
 	}
 
 	for i, c := range cases {
