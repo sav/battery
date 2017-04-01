@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -60,10 +60,12 @@ func readBatteries() ([]*battery, error) {
 func convertBattery(battery *battery) *Battery {
 	volts := float64(battery.Voltage) / 1000
 	b := &Battery{
-		Current:    float64(battery.CurrentCapacity) * volts,
-		Full:       float64(battery.MaxCapacity) * volts,
-		Design:     float64(battery.DesignCapacity) * volts,
-		ChargeRate: math.Abs(float64(battery.Amperage)) * volts,
+		Current:       float64(battery.CurrentCapacity) * volts,
+		Full:          float64(battery.MaxCapacity) * volts,
+		Design:        float64(battery.DesignCapacity) * volts,
+		ChargeRate:    math.Abs(float64(battery.Amperage)) * volts,
+		Voltage:       volts,
+		DesignVoltage: volts,
 	}
 	switch {
 	case !battery.ExternalConnected:
