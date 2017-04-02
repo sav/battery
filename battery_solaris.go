@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -44,6 +44,14 @@ func readFloat(val string) (float64, error) {
 	return num, nil
 }
 
+func readVoltage(val string) (float64, error) {
+	voltage, err := readFloat(val)
+	if err != nil {
+		return 0, err
+	}
+	return voltage / 1000, nil
+}
+
 type errParse int
 
 func (p errParse) Error() string {
@@ -59,11 +67,13 @@ type batteryReader struct {
 func (r *batteryReader) next() (*Battery, error) {
 	b := &Battery{}
 	e := ErrPartial{
-		Design:     errValueNotFound,
-		Full:       errValueNotFound,
-		Current:    errValueNotFound,
-		ChargeRate: errValueNotFound,
-		State:      errValueNotFound,
+		Design:        errValueNotFound,
+		Full:          errValueNotFound,
+		Current:       errValueNotFound,
+		ChargeRate:    errValueNotFound,
+		State:         errValueNotFound,
+		Voltage:       errValueNotFound,
+		DesignVoltage: errValueNotFound,
 	}
 	setErrParse := func(n int) {
 		if e.Design == errValueNotFound {
@@ -81,10 +91,15 @@ func (r *batteryReader) next() (*Battery, error) {
 		if e.State == errValueNotFound {
 			e.State = errParse(n)
 		}
+		if e.Voltage == errValueNotFound {
+			e.Voltage = errParse(n)
+		}
+		if e.DesignVoltage == errValueNotFound {
+			e.DesignVoltage = errParse(n)
+		}
 	}
 
 	var exists, amps bool
-	var voltage string
 
 	for r.cmdout.Scan() {
 		exists = true
@@ -130,7 +145,9 @@ func (r *batteryReader) next() (*Battery, error) {
 		case "bif_unit":
 			amps = value != "0"
 		case "bif_voltage":
-			voltage = value
+			b.DesignVoltage, e.DesignVoltage = readVoltage(value)
+		case "bst_voltage":
+			b.Voltage, e.Voltage = readVoltage(value)
 		case "bst_rem_cap":
 			b.Current, e.Current = readFloat(value)
 		case "bst_rate":
@@ -159,19 +176,24 @@ func (r *batteryReader) next() (*Battery, error) {
 		return nil, io.EOF
 	}
 
+	if e.DesignVoltage != nil && e.Voltage == nil {
+		b.DesignVoltage, e.DesignVoltage = b.Voltage, nil
+	}
+
 	if amps {
-		v, err := readFloat(voltage)
-		if err == nil {
-			v /= 1000
-			b.Design *= v
-			b.Full *= v
-			b.Current *= v
-			b.ChargeRate *= v
+		if e.DesignVoltage == nil {
+			b.Design *= b.DesignVoltage
 		} else {
-			e.Design = err
-			e.Full = err
-			e.Current = err
-			e.ChargeRate = err
+			e.Design = e.DesignVoltage
+		}
+		if e.Voltage == nil {
+			b.Full *= b.Voltage
+			b.Current *= b.Voltage
+			b.ChargeRate *= b.Voltage
+		} else {
+			e.Full = e.Voltage
+			e.Current = e.Voltage
+			e.ChargeRate = e.Voltage
 		}
 	}
 
