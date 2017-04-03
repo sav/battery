@@ -52,6 +52,24 @@ func readVoltage(val string) (float64, error) {
 	return voltage / 1000, nil
 }
 
+func readState(val string) (State, error) {
+	state, err := strconv.Atoi(val)
+	if err != nil {
+		return Unknown, err
+	}
+
+	switch {
+	case state&1 != 0:
+		return newState("Discharging")
+	case state&2 != 0:
+		return newState("Charging")
+	case state&4 != 0:
+		return newState("Empty")
+	default:
+		return Unknown, fmt.Errorf("Invalid state flag retrieved: `%d`", state)
+	}
+}
+
 type errParse int
 
 func (p errParse) Error() string {
@@ -62,11 +80,106 @@ type batteryReader struct {
 	cmdout *bufio.Scanner
 	li     int
 	lline  []byte
+	e      ErrPartial
+}
+
+func (r *batteryReader) setErrParse(n int) {
+	if r.e.Design == errValueNotFound {
+		r.e.Design = errParse(n)
+	}
+	if r.e.Full == errValueNotFound {
+		r.e.Full = errParse(n)
+	}
+	if r.e.Current == errValueNotFound {
+		r.e.Current = errParse(n)
+	}
+	if r.e.ChargeRate == errValueNotFound {
+		r.e.ChargeRate = errParse(n)
+	}
+	if r.e.State == errValueNotFound {
+		r.e.State = errParse(n)
+	}
+	if r.e.Voltage == errValueNotFound {
+		r.e.Voltage = errParse(n)
+	}
+	if r.e.DesignVoltage == errValueNotFound {
+		r.e.DesignVoltage = errParse(n)
+	}
+}
+
+func (r *batteryReader) readValue() (string, string, int) {
+	var piece []byte
+	if r.lline != nil {
+		piece = r.lline
+		r.lline = nil
+	} else {
+		pieces := bytes.Split(r.cmdout.Bytes(), []byte{':'})
+		if len(pieces) < 4 {
+			return "", "", 4
+		}
+
+		i, err := strconv.Atoi(string(pieces[1]))
+		if err != nil {
+			return "", "", 1
+		}
+
+		if i != r.li {
+			r.li = i
+			r.lline = pieces[3]
+			return "", "", 666
+		}
+
+		piece = pieces[3]
+	}
+
+	values := bytes.Split(piece, []byte{'\t'})
+	if len(values) < 2 {
+		return "", "", 2
+	}
+	return string(values[0]), string(values[1]), 0
+}
+
+func (r *batteryReader) readBattery() (*Battery, bool, bool) {
+	b := &Battery{}
+	var exists, amps bool
+
+	for r.cmdout.Scan() {
+		exists = true
+
+		name, value, errno := r.readValue()
+		if errno == 666 {
+			break
+		}
+		if errno != 0 {
+			r.setErrParse(errno)
+			continue
+		}
+
+		switch name {
+		case "bif_design_cap":
+			b.Design, r.e.Design = readFloat(value)
+		case "bif_last_cap":
+			b.Full, r.e.Full = readFloat(value)
+		case "bif_unit":
+			amps = value != "0"
+		case "bif_voltage":
+			b.DesignVoltage, r.e.DesignVoltage = readVoltage(value)
+		case "bst_voltage":
+			b.Voltage, r.e.Voltage = readVoltage(value)
+		case "bst_rem_cap":
+			b.Current, r.e.Current = readFloat(value)
+		case "bst_rate":
+			b.ChargeRate, r.e.ChargeRate = readFloat(value)
+		case "bst_state":
+			b.State, r.e.State = readState(value)
+		}
+	}
+
+	return b, amps, exists
 }
 
 func (r *batteryReader) next() (*Battery, error) {
-	b := &Battery{}
-	e := ErrPartial{
+	r.e = ErrPartial{
 		Design:        errValueNotFound,
 		Full:          errValueNotFound,
 		Current:       errValueNotFound,
@@ -75,133 +188,39 @@ func (r *batteryReader) next() (*Battery, error) {
 		Voltage:       errValueNotFound,
 		DesignVoltage: errValueNotFound,
 	}
-	setErrParse := func(n int) {
-		if e.Design == errValueNotFound {
-			e.Design = errParse(n)
-		}
-		if e.Full == errValueNotFound {
-			e.Full = errParse(n)
-		}
-		if e.Current == errValueNotFound {
-			e.Current = errParse(n)
-		}
-		if e.ChargeRate == errValueNotFound {
-			e.ChargeRate = errParse(n)
-		}
-		if e.State == errValueNotFound {
-			e.State = errParse(n)
-		}
-		if e.Voltage == errValueNotFound {
-			e.Voltage = errParse(n)
-		}
-		if e.DesignVoltage == errValueNotFound {
-			e.DesignVoltage = errParse(n)
-		}
-	}
 
-	var exists, amps bool
-
-	for r.cmdout.Scan() {
-		exists = true
-
-		var piece []byte
-		if r.lline != nil {
-			piece = r.lline
-			r.lline = nil
-		} else {
-			pieces := bytes.Split(r.cmdout.Bytes(), []byte{':'})
-			if len(pieces) < 4 {
-				setErrParse(4)
-				continue
-			}
-
-			i, err := strconv.Atoi(string(pieces[1]))
-			if err != nil {
-				setErrParse(1)
-				continue
-			}
-
-			if i != r.li {
-				r.li = i
-				r.lline = pieces[3]
-				break
-			}
-
-			piece = pieces[3]
-		}
-
-		values := bytes.Split(piece, []byte{'\t'})
-		if len(values) < 2 {
-			setErrParse(2)
-			continue
-		}
-		name, value := string(values[0]), string(values[1])
-
-		switch name {
-		case "bif_design_cap":
-			b.Design, e.Design = readFloat(value)
-		case "bif_last_cap":
-			b.Full, e.Full = readFloat(value)
-		case "bif_unit":
-			amps = value != "0"
-		case "bif_voltage":
-			b.DesignVoltage, e.DesignVoltage = readVoltage(value)
-		case "bst_voltage":
-			b.Voltage, e.Voltage = readVoltage(value)
-		case "bst_rem_cap":
-			b.Current, e.Current = readFloat(value)
-		case "bst_rate":
-			b.ChargeRate, e.ChargeRate = readFloat(value)
-		case "bst_state":
-			state, err := strconv.Atoi(value)
-			if err != nil {
-				e.State = err
-				continue
-			}
-
-			switch {
-			case state&1 != 0:
-				b.State, e.State = newState("Discharging")
-			case state&2 != 0:
-				b.State, e.State = newState("Charging")
-			case state&4 != 0:
-				b.State, e.State = newState("Empty")
-			default:
-				e.State = fmt.Errorf("Invalid state flag retrieved: `%d`", state)
-			}
-		}
-	}
+	b, amps, exists := r.readBattery()
 
 	if !exists {
 		return nil, io.EOF
 	}
 
-	if e.DesignVoltage != nil && e.Voltage == nil {
-		b.DesignVoltage, e.DesignVoltage = b.Voltage, nil
+	if r.e.DesignVoltage != nil && r.e.Voltage == nil {
+		b.DesignVoltage, r.e.DesignVoltage = b.Voltage, nil
 	}
 
 	if amps {
-		if e.DesignVoltage == nil {
+		if r.e.DesignVoltage == nil {
 			b.Design *= b.DesignVoltage
 		} else {
-			e.Design = e.DesignVoltage
+			r.e.Design = r.e.DesignVoltage
 		}
-		if e.Voltage == nil {
+		if r.e.Voltage == nil {
 			b.Full *= b.Voltage
 			b.Current *= b.Voltage
 			b.ChargeRate *= b.Voltage
 		} else {
-			e.Full = e.Voltage
-			e.Current = e.Voltage
-			e.ChargeRate = e.Voltage
+			r.e.Full = r.e.Voltage
+			r.e.Current = r.e.Voltage
+			r.e.ChargeRate = r.e.Voltage
 		}
 	}
 
-	if b.State == Unknown && e.Current == nil && e.Full == nil && b.Current >= b.Full {
-		b.State, e.State = newState("Full")
+	if b.State == Unknown && r.e.Current == nil && r.e.Full == nil && b.Current >= b.Full {
+		b.State, r.e.State = newState("Full")
 	}
 
-	return b, e
+	return b, r.e
 }
 
 func newBatteryReader() (*batteryReader, error) {
