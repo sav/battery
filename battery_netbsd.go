@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -22,6 +22,7 @@
 package battery
 
 import (
+	"errors"
 	"math"
 	"sort"
 	"strings"
@@ -79,6 +80,68 @@ func readProps() (props, error) {
 	return props, nil
 }
 
+func handleValue(val values, div float64, res *float64, amps *[]string) error {
+	if val.State == "invalid" || val.State == "unknown" {
+		return errors.New("Unknown value received")
+	}
+
+	*res = float64(val.CurValue) / div
+
+	if amps != nil && strings.HasPrefix(val.Type, "Amp") {
+		*amps = append(*amps, val.Description)
+	}
+
+	return nil
+}
+
+func deriveState(cr1, cr2 error, current float64, max int) (State, error) {
+	if cr1 == nil && cr2 != nil {
+		return Charging, nil
+	}
+	if cr1 != nil && cr2 == nil {
+		return Discharging, nil
+	}
+	if cr1 != nil && cr2 != nil && current == float64(max)/1000 {
+		return Full, nil
+	}
+	return Unknown, errors.New("Contradicting values received")
+}
+
+func handleVoltage(amps []string, b *Battery, e *ErrPartial) {
+	if e.DesignVoltage != nil && e.Voltage == nil {
+		b.DesignVoltage, e.DesignVoltage = b.Voltage, nil
+	}
+
+	for _, val := range amps {
+		switch val {
+		case "design cap":
+			if e.DesignVoltage == nil {
+				b.Design *= b.DesignVoltage
+			} else {
+				e.Design = e.DesignVoltage
+			}
+		case "last full cap":
+			if e.Voltage == nil {
+				b.Full *= b.Voltage
+			} else {
+				e.Full = e.Voltage
+			}
+		case "charge":
+			if e.Voltage == nil {
+				b.Current *= b.Voltage
+			} else {
+				e.Current = e.Voltage
+			}
+		case "charge rate", "discharge rate":
+			if e.Voltage == nil {
+				b.ChargeRate *= b.Voltage
+			} else {
+				e.ChargeRate = e.Voltage
+			}
+		}
+	}
+}
+
 func sortFilterProps(props props) []string {
 	var keys []string
 	for key := range props {
@@ -91,59 +154,40 @@ func sortFilterProps(props props) []string {
 	return keys
 }
 
-func convertBattery(prop prop) *Battery {
-	battery := &Battery{}
+func convertBattery(prop prop) (*Battery, error) {
+	b := &Battery{}
+	e := ErrPartial{}
 
-	var voltsDesign int
-	var volts int
-	for _, val := range prop {
-		if val.Description == "voltage" {
-			volts = val.CurValue
-		} else if val.Description == "design voltage" {
-			voltsDesign = val.CurValue
-		}
-	}
+	amps := []string{}
+	var cr1, cr2 error
+	var maxCharge int
 
-	maybeAmpToWatt := func(val values) float64 {
-		if strings.HasPrefix(val.Type, "Watt") {
-			return float64(val.CurValue) / 1000
-		}
-		if strings.HasSuffix(val.Description, "cap") {
-			return float64(val.CurValue) / 1000 * float64(voltsDesign)
-		}
-		return float64(val.CurValue) / 1000 * float64(volts)
-	}
-
-	var stateGuard int8
 	for _, val := range prop {
 		switch val.Description {
+		case "voltage":
+			e.Voltage = handleValue(val, 1000000, &b.Voltage, nil)
+		case "design voltage":
+			e.DesignVoltage = handleValue(val, 1000000, &b.DesignVoltage, nil)
 		case "design cap":
-			battery.Design = maybeAmpToWatt(val)
+			e.Design = handleValue(val, 1000, &b.Design, &amps)
 		case "last full cap":
-			battery.Full = maybeAmpToWatt(val)
+			e.Full = handleValue(val, 1000, &b.Full, &amps)
 		case "charge":
-			battery.Current = maybeAmpToWatt(val)
-			if val.CurValue == val.MaxValue {
-				battery.State, _ = newState("Full")
-			}
+			e.Current = handleValue(val, 1000, &b.Current, &amps)
+			maxCharge = val.MaxValue
 		case "charge rate":
-			if val.State == "valid" {
-				battery.ChargeRate = maybeAmpToWatt(val)
-				battery.State, _ = newState("Charging")
-				stateGuard++
-			}
+			cr1 = handleValue(val, 1000, &b.ChargeRate, &amps)
 		case "discharge rate":
-			if val.State == "valid" {
-				battery.ChargeRate = math.Abs(maybeAmpToWatt(val))
-				battery.State, _ = newState("Discharging")
-				stateGuard++
-			}
+			cr2 = handleValue(val, 1000, &b.ChargeRate, &amps)
+			b.ChargeRate = math.Abs(b.ChargeRate)
 		}
 	}
-	if stateGuard == 2 {
-		battery.State, _ = newState("Unknown")
-	}
-	return battery
+
+	b.State, e.State = deriveState(cr1, cr2, b.Current, maxCharge)
+
+	handleVoltage(amps, b, &e)
+
+	return b, e
 }
 
 func systemGet(idx int) (*Battery, error) {
@@ -156,7 +200,7 @@ func systemGet(idx int) (*Battery, error) {
 	if idx >= len(keys) {
 		return nil, ErrNotFound
 	}
-	return convertBattery(props[keys[idx]]), nil
+	return convertBattery(props[keys[idx]])
 }
 
 func systemGetAll() ([]*Battery, error) {
@@ -169,7 +213,7 @@ func systemGetAll() ([]*Battery, error) {
 	batteries := make([]*Battery, len(keys))
 	errors := make(Errors, len(keys))
 	for i, key := range keys {
-		batteries[i] = convertBattery(props[key])
+		batteries[i], errors[i] = convertBattery(props[key])
 	}
 
 	return batteries, errors
