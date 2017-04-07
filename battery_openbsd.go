@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -52,12 +52,22 @@ type sensordev struct {
 	sensors_count int32
 }
 
+type sensorStatus int32
+
+const (
+	unspecified sensorStatus = iota
+	ok
+	warning
+	critical
+	unknown
+)
+
 type sensor struct {
 	desc   [32]byte
 	tv     [16]byte // struct timeval
 	value  int64
-	type_  [4]byte // enum sensor_type
-	status [4]byte // enum sensor_status
+	typ    [4]byte // enum sensor_type
+	status sensorStatus
 	numt   int32
 	flags  int32
 }
@@ -75,9 +85,9 @@ func sysctl(mib []int32, out unsafe.Pointer, n uintptr) syscall.Errno {
 	return e
 }
 
-func ampToWatt(err error, val, volts int64) (float64, error) {
+func ampToWatt(err error, val int64, volts float64) (float64, error) {
 	if err == errValueNotFound {
-		return (float64(val) / 1000) * (float64(volts) / 1000000), nil
+		return (float64(val) / 1000) * volts, nil
 	}
 	return 0, err
 }
@@ -116,16 +126,17 @@ func sensordevIter(cb func(sd sensordev, i int, err error) bool) {
 func getBattery(sd sensordev) (*Battery, error) {
 	b := &Battery{}
 	e := ErrPartial{
-		Design:     errValueNotFound,
-		Full:       errValueNotFound,
-		Current:    errValueNotFound,
-		ChargeRate: errValueNotFound,
-		State:      errValueNotFound,
+		Design:        errValueNotFound,
+		Full:          errValueNotFound,
+		Current:       errValueNotFound,
+		ChargeRate:    errValueNotFound,
+		State:         errValueNotFound,
+		Voltage:       errValueNotFound,
+		DesignVoltage: errValueNotFound,
 	}
 
 	var i int32
 	var s sensor
-	var volts, voltsDesign int64
 	mib := []int32{6, 11, sd.num, 0, 0}
 	for _, w := range sensorW {
 		mib[3] = w
@@ -148,6 +159,12 @@ func getBattery(sd sensordev) (*Battery, error) {
 				}
 				if e.State == errValueNotFound {
 					e.State = err
+				}
+				if e.Voltage == errValueNotFound {
+					e.Voltage = err
+				}
+				if e.DesignVoltage == errValueNotFound {
+					e.DesignVoltage = err
 				}
 				continue
 			}
@@ -174,31 +191,42 @@ func getBattery(sd sensordev) (*Battery, error) {
 			case "remaining capacity":
 				b.Current, e.Current = float64(s.value)/1000, nil
 			case "current voltage":
-				volts = s.value
+				b.Voltage, e.Voltage = float64(s.value)/1000000, nil
 			case "voltage":
-				voltsDesign = s.value
+				if s.status == unknown {
+					e.DesignVoltage = fmt.Errorf("Unknown value received")
+					continue
+				}
+				b.DesignVoltage, e.DesignVoltage = float64(s.value)/1000000, nil
 			}
 		}
 	}
 
+	if e.DesignVoltage != nil && e.Voltage == nil {
+		b.DesignVoltage, e.DesignVoltage = b.Voltage, nil
+	}
+
 	if e.ChargeRate == errValueNotFound {
-		mib[3] = sensorA
+		if e.Voltage == nil {
+			mib[3] = sensorA
 
-		for i = 0; i < sd.maxnumt[sensorA]; i++ {
-			mib[4] = i
+			for i = 0; i < sd.maxnumt[sensorA]; i++ {
+				mib[4] = i
 
-			if err := sysctl(mib, unsafe.Pointer(&s), unsafe.Sizeof(s)); err != 0 {
-				e.ChargeRate = err
+				if err := sysctl(mib, unsafe.Pointer(&s), unsafe.Sizeof(s)); err != 0 {
+					e.ChargeRate = err
+				}
+
+				desc := string(s.desc[:bytes.IndexByte(s.desc[:], 0)])
+
+				if desc != "rate" {
+					continue
+				}
+
+				b.ChargeRate, e.ChargeRate = (float64(s.value)/1000)*b.Voltage, nil
 			}
-
-			desc := string(s.desc[:bytes.IndexByte(s.desc[:], 0)])
-
-			if desc != "rate" {
-				continue
-			}
-
-			b.ChargeRate = (float64(s.value) / 1000) * (float64(volts) / 1000000)
-			e.ChargeRate = nil
+		} else {
+			e.ChargeRate = e.Voltage
 		}
 	}
 	if e.Design == errValueNotFound || e.Full == errValueNotFound || e.Current == errValueNotFound {
@@ -217,11 +245,11 @@ func getBattery(sd sensordev) (*Battery, error) {
 
 			switch desc {
 			case "design capacity":
-				b.Design, e.Design = ampToWatt(e.Design, s.value, voltsDesign)
+				b.Design, e.Design = ampToWatt(e.Design, s.value, b.DesignVoltage)
 			case "last full capacity":
-				b.Full, e.Full = ampToWatt(e.Full, s.value, volts)
+				b.Full, e.Full = ampToWatt(e.Full, s.value, b.Voltage)
 			case "remaining capacity":
-				b.Current, e.Current = ampToWatt(e.Current, s.value, volts)
+				b.Current, e.Current = ampToWatt(e.Current, s.value, b.Voltage)
 			}
 		}
 	}
