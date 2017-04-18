@@ -81,15 +81,15 @@ func systemGet(idx int) (*Battery, error) {
 	if err == nil {
 		switch readUint32(retptr[0:4]) { // acpi_bst.state
 		case 0x0000:
-			b.State, _ = newState("Full")
+			b.State = Full
 		case 0x0001:
-			b.State, _ = newState("Discharging")
+			b.State = Discharging
 		case 0x0002:
-			b.State, _ = newState("Charging")
+			b.State = Charging
 		case 0x0004:
-			b.State, _ = newState("Empty")
+			b.State = Empty
 		default:
-			b.State, _ = newState("Unknown")
+			b.State = Unknown
 		}
 		b.ChargeRate, e.ChargeRate = uint32ToFloat64(readUint32(retptr[4:8])) // acpi_bst.rate
 		b.Current, e.Current = uint32ToFloat64(readUint32(retptr[8:12]))      // acpi_bst.cap
