@@ -99,6 +99,11 @@ func systemGet(idx int) (*Battery, error) {
 		e.State = err
 		e.ChargeRate = err
 		e.Current = err
+		e.Voltage = err
+	}
+
+	if e.DesignVoltage != nil && e.Voltage == nil {
+		b.DesignVoltage, e.DesignVoltage = b.Voltage, nil
 	}
 
 	if !mw {
