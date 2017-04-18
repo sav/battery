@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -59,7 +59,6 @@ func systemGet(idx int) (*Battery, error) {
 
 	b := &Battery{}
 	e := ErrPartial{}
-	var mw bool
 
 	// No unions in Go, so lets "emulate" union with byte array ;-].
 	var retptr [164]byte
@@ -70,21 +69,12 @@ func systemGet(idx int) (*Battery, error) {
 	if err != nil {
 		return nil, err
 	}
-	mw = readUint32(retptr[0:4]) == 0 // acpi_bif.units
+	mw := readUint32(retptr[0:4]) == 0 // acpi_bif.units
 
-	b.Design, e.Design = uint32ToFloat64(readUint32(retptr[4:8])) // acpi_bif.dcap
-	b.Full, e.Full = uint32ToFloat64(readUint32(retptr[8:12]))    // acpi_bif.lfcap
-	if !mw {
-		volts, err := uint32ToFloat64(readUint32(retptr[16:20])) // acpi_bif.dvol
-
-		if err == nil {
-			b.Design *= volts
-			b.Full *= volts
-		} else {
-			e.Design = err
-			e.Full = err
-		}
-	}
+	b.Design, e.Design = uint32ToFloat64(readUint32(retptr[4:8]))                 // acpi_bif.dcap
+	b.Full, e.Full = uint32ToFloat64(readUint32(retptr[8:12]))                    // acpi_bif.lfcap
+	b.DesignVoltage, e.DesignVoltage = uint32ToFloat64(readUint32(retptr[16:20])) // acpi_bif.dvol
+	b.DesignVoltage /= 1000
 
 	*unit = idx
 	err = ioctl_(fd, 0x11, &retptr) // APCIIO_BATT_GET_BST
@@ -103,21 +93,29 @@ func systemGet(idx int) (*Battery, error) {
 		}
 		b.ChargeRate, e.ChargeRate = uint32ToFloat64(readUint32(retptr[4:8])) // acpi_bst.rate
 		b.Current, e.Current = uint32ToFloat64(readUint32(retptr[8:12]))      // acpi_bst.cap
-
-		if !mw {
-			volts, err := uint32ToFloat64(readUint32(retptr[12:16])) // acpi_bst.volt
-			if err == nil {
-				b.ChargeRate *= volts
-				b.Current *= volts
-			} else {
-				e.ChargeRate = err
-				e.Current = err
-			}
-		}
+		b.Voltage, e.Voltage = uint32ToFloat64(readUint32(retptr[12:16]))     // acpi_bst.volt
+		b.Voltage /= 1000
 	} else {
 		e.State = err
 		e.ChargeRate = err
 		e.Current = err
+	}
+
+	if !mw {
+		if e.DesignVoltage == nil {
+			b.Design *= b.DesignVoltage
+		} else {
+			e.Design = e.DesignVoltage
+		}
+		if e.Voltage == nil {
+			b.Full *= b.Voltage
+			b.ChargeRate *= b.Voltage
+			b.Current *= b.Voltage
+		} else {
+			e.Full = e.Voltage
+			e.ChargeRate = e.Voltage
+			e.Current = e.Voltage
+		}
 	}
 
 	return b, e
