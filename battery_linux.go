@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -75,18 +75,32 @@ func getByPath(path string) (*Battery, error) {
 	b := &Battery{}
 	e := ErrPartial{}
 	b.Current, e.Current = readFloat(path, "energy_now")
+	b.Voltage, e.Voltage = readFloat(path, "voltage_now")
+	b.Voltage /= 1000
+	b.DesignVoltage, e.DesignVoltage = readFloat(path, "voltage_max_design")
+	if e.DesignVoltage != nil {
+		b.DesignVoltage, e.DesignVoltage = readFloat(path, "voltage_min_design")
+	}
+	b.DesignVoltage /= 1000
+
+	if e.DesignVoltage != nil && e.Voltage == nil {
+		b.DesignVoltage, e.DesignVoltage = b.Voltage, nil
+	}
+
 	if os.IsNotExist(e.Current) {
-		volts, err := readFloat(path, "voltage_now")
-		if err == nil {
-			volts /= 1000000
-			b.Current, e.Current = readAmp(path, "charge_now", volts)
-			b.Full, e.Full = readAmp(path, "charge_full", volts)
-			b.Design, e.Design = readAmp(path, "charge_full_design", volts)
-			b.ChargeRate, e.ChargeRate = readAmp(path, "current_now", volts)
+		if e.DesignVoltage == nil {
+			b.Design, e.Design = readAmp(path, "charge_full_design", b.DesignVoltage)
 		} else {
-			e.Full = err
-			e.Design = err
-			e.ChargeRate = err
+			e.Design = e.DesignVoltage
+		}
+		if e.Voltage == nil {
+			b.Current, e.Current = readAmp(path, "charge_now", b.Voltage)
+			b.Full, e.Full = readAmp(path, "charge_full", b.Voltage)
+			b.ChargeRate, e.ChargeRate = readAmp(path, "current_now", b.Voltage)
+		} else {
+			e.Current = e.Voltage
+			e.Full = e.Voltage
+			e.ChargeRate = e.Voltage
 		}
 	} else {
 		b.Full, e.Full = readFloat(path, "energy_full")
