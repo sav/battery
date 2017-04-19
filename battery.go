@@ -93,7 +93,7 @@ type Battery struct {
 	// Design voltage (in V).
 	// Some systems (e.g. macOS) do not provide a separate
 	// value for this. In such cases, or if getting this fails,
-	// but getting `Voltage` succedes, this field will have
+	// but getting `Voltage` succeeds, this field will have
 	// the same value as `Voltage`, for convenience.
 	DesignVoltage float64
 }
