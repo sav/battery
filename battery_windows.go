@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -129,6 +129,21 @@ var setupDiEnumDeviceInterfaces = setupapi.NewProc("SetupDiEnumDeviceInterfaces"
 var setupDiGetDeviceInterfaceDetailW = setupapi.NewProc("SetupDiGetDeviceInterfaceDetailW")
 var setupDiDestroyDeviceInfoList = setupapi.NewProc("SetupDiDestroyDeviceInfoList")
 
+func readState(powerState uint32) State {
+	switch powerState {
+	case 0x00000004:
+		return Charging
+	case 0x00000008:
+		return Empty
+	case 0x00000002:
+		return Discharging
+	case 0x00000001:
+		return Full
+	default:
+		return Unknown
+	}
+}
+
 func systemGet(idx int) (*Battery, error) {
 	hdev, err := setupDiSetup(
 		setupDiGetClassDevsW,
@@ -156,7 +171,7 @@ func systemGet(idx int) (*Battery, error) {
 		uintptr(unsafe.Pointer(&did)),
 		0,
 	)
-	if errno == 259 { //ERROR_NO_MORE_ITEMS
+	if errno == 259 { // ERROR_NO_MORE_ITEMS
 		return nil, ErrNotFound
 	}
 	if errno != 0 {
@@ -275,18 +290,7 @@ func systemGet(idx int) (*Battery, error) {
 		b.ChargeRate, e.ChargeRate = int32ToFloat64(bs.Rate)
 		b.Voltage, e.Voltage = uint32ToFloat64(bs.Voltage)
 		b.Voltage /= 1000
-		switch bs.PowerState {
-		case 0x00000004:
-			b.State, _ = newState("Charging")
-		case 0x00000008:
-			b.State, _ = newState("Empty")
-		case 0x00000002:
-			b.State, _ = newState("Discharging")
-		case 0x00000001:
-			b.State, _ = newState("Full")
-		default:
-			b.State, _ = newState("Unknown")
-		}
+		b.State = readState(bs.PowerState)
 	} else {
 		e.Current = err
 		e.ChargeRate = err
