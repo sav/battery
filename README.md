@@ -3,8 +3,7 @@ battery [![Build Status](https://travis-ci.org/distatus/battery.svg?branch=maste
 
 Cross-platform, normalized battery information library.
 
-Gives access to a system independent, typed battery state and capacity/charge
-values recalculated as necessary to be returned in mW(h) units.
+Gives access to a system independent, typed battery state, capacity, charge and voltage values recalculated as necessary to be returned in mW, mWh or V units.
 
 Currently supported systems:
 
@@ -46,7 +45,9 @@ func main() {
 		fmt.Printf("current capacity: %f mWh, ", battery.Current)
 		fmt.Printf("last full capacity: %f mWh, ", battery.Full)
 		fmt.Printf("design capacity: %f mWh, ", battery.Design)
-		fmt.Printf("charge rate: %f mW\n", battery.ChargeRate)
+		fmt.Printf("charge rate: %f mW, ", battery.ChargeRate)
+		fmt.Printf("voltage: %f V, ", battery.Voltage)
+		fmt.Printf("design voltage: %f V\n", battery.DesignVoltage)
 	}
 }
 ```
@@ -66,5 +67,5 @@ $ go get -u github.com/distatus/battery/cmd/battery
 
 ```bash
 $ battery
-BAT0: Full, 95.61%
+BAT0: Full, 95.61% [Voltage: 12.15V (design: 12.15V)]
 ```

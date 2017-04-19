@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -21,8 +21,7 @@
 
 // Package battery provides cross-platform, normalized battery information.
 //
-// Gives access to a system independent, typed battery state and capacity/charge
-// values recalculated as necessary to be returned in mW(h) units.
+// Gives access to a system independent, typed battery state, capacity, charge and voltage values recalculated as necessary to be returned in mW, mWh or V units.
 //
 // Currently supported systems:
 //  Linux 2.6.39+
@@ -93,8 +92,9 @@ type Battery struct {
 	Voltage float64
 	// Design voltage (in V).
 	// Some systems (e.g. macOS) do not provide a separate
-	// value for this. In such cases, this field will be
-	// set to the value of `Voltage` field, for convenience.
+	// value for this. In such cases, or if getting this fails,
+	// but getting `Voltage` succedes, this field will have
+	// the same value as `Voltage`, for convenience.
 	DesignVoltage float64
 }
 
