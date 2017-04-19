@@ -273,6 +273,8 @@ func systemGet(idx int) (*Battery, error) {
 	if err == nil {
 		b.Current, e.Current = uint32ToFloat64(bs.Capacity)
 		b.ChargeRate, e.ChargeRate = int32ToFloat64(bs.Rate)
+		b.Voltage, e.Voltage = uint32ToFloat64(bs.Voltage)
+		b.Voltage /= 1000
 		switch bs.PowerState {
 		case 0x00000004:
 			b.State, _ = newState("Charging")
@@ -288,8 +290,11 @@ func systemGet(idx int) (*Battery, error) {
 	} else {
 		e.Current = err
 		e.ChargeRate = err
+		e.Voltage = err
 		e.State = err
 	}
+
+	b.DesignVoltage, e.DesignVoltage = b.Voltage, e.Voltage
 
 	return b, e
 }
