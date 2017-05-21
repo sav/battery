@@ -77,15 +77,15 @@ func getByPath(path string) (*Battery, error) {
 	b.Current, e.Current = readFloat(path, "energy_now")
 	b.Voltage, e.Voltage = readFloat(path, "voltage_now")
 	b.Voltage /= 1000
+
 	b.DesignVoltage, e.DesignVoltage = readFloat(path, "voltage_max_design")
 	if e.DesignVoltage != nil {
 		b.DesignVoltage, e.DesignVoltage = readFloat(path, "voltage_min_design")
 	}
-	b.DesignVoltage /= 1000
-
 	if e.DesignVoltage != nil && e.Voltage == nil {
 		b.DesignVoltage, e.DesignVoltage = b.Voltage, nil
 	}
+	b.DesignVoltage /= 1000
 
 	if os.IsNotExist(e.Current) {
 		if e.DesignVoltage == nil {
