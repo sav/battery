@@ -64,7 +64,7 @@ func printBattery(idx int, bat *battery.Battery) {
 
 func main() {
 	batteries, err := battery.GetAll()
-	if err != nil {
+	if err, isFatal := err.(battery.ErrFatal); isFatal {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -72,7 +72,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "No batteries")
 		os.Exit(1)
 	}
+	errs, partialErrs := err.(battery.Errors)
 	for i, bat := range batteries {
+		if partialErrs && errs[i] != nil {
+			fmt.Fprintf(os.Stderr, "Error getting info for BAT%d: %s\n", i, errs[i])
+			continue
+		}
 		printBattery(i, bat)
 	}
 }
