@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017,2019 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -48,7 +48,7 @@ const (
 type sensordev struct {
 	num           int32
 	xname         [16]byte
-	maxnumt       [21]int32
+	maxnumt       [22]int32
 	sensors_count int32
 }
 
