@@ -130,14 +130,14 @@ var setupDiGetDeviceInterfaceDetailW = setupapi.NewProc("SetupDiGetDeviceInterfa
 var setupDiDestroyDeviceInfoList = setupapi.NewProc("SetupDiDestroyDeviceInfoList")
 
 func readState(powerState uint32) State {
-	switch powerState {
-	case 0x00000004:
+	switch {
+	case powerState&0x00000004 != 0:
 		return Charging
-	case 0x00000008:
+	case powerState&0x00000008 != 0:
 		return Empty
-	case 0x00000002:
+	case powerState&0x00000002 != 0:
 		return Discharging
-	case 0x00000001:
+	case powerState&0x00000001 != 0:
 		return Full
 	default:
 		return Unknown
