@@ -1,4 +1,4 @@
-battery ![Build Status](https://github.com/distatus/battery/actions/workflows/tests.yml/badge.svg?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/distatus/battery)](https://goreportcard.com/report/github.com/distatus/battery) [![GoDoc](https://pkg.go.dev/badge/github.com/distatus/battery)](https://pkg.go.dev/github.com/distatus/battery)
+battery [![Build Status](https://github.com/distatus/battery/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/distatus/battery/actions/workflows/tests.yml) [![Go Report Card](https://goreportcard.com/badge/github.com/distatus/battery)](https://goreportcard.com/report/github.com/distatus/battery) [![GoDoc](https://pkg.go.dev/badge/github.com/distatus/battery)](https://pkg.go.dev/github.com/distatus/battery)
 =======
 
 Cross-platform, normalized battery information library.
