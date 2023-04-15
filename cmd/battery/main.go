@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017,2023 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -40,7 +40,7 @@ func printBattery(idx int, bat *battery.Battery) {
 
 	var str string
 	var timeNum float64
-	switch bat.State {
+	switch bat.State.Raw {
 	case battery.Discharging:
 		if bat.ChargeRate == 0 {
 			fmt.Print(", discharging at zero rate - will never fully discharge")

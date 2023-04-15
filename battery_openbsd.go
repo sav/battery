@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016-2017,2019 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017,2019,2023 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -25,11 +25,23 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
-	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
+
+func sysctl(mib []int32, out unsafe.Pointer, n uintptr) unix.Errno {
+	_, _, e := unix.Syscall6(
+		unix.SYS___SYSCTL,
+		uintptr(unsafe.Pointer(&mib[0])),
+		uintptr(len(mib)),
+		uintptr(out),
+		uintptr(unsafe.Pointer(&n)),
+		uintptr(unsafe.Pointer(nil)),
+		0,
+	)
+	return e
+}
 
 var errValueNotFound = fmt.Errorf("Value not found")
 
@@ -44,13 +56,6 @@ const (
 	sensorA  = 6 // SENSOR_AMPS (uA)
 	sensorAH = 8 // SENSOR_AMPHOUR (uAh)
 )
-
-type sensordev struct {
-	num           int32
-	xname         [16]byte
-	maxnumt       [22]int32
-	sensors_count int32
-}
 
 type sensorStatus int32
 
@@ -72,25 +77,6 @@ type sensor struct {
 	flags  int32
 }
 
-type interValue struct {
-	v *float64
-	s *State
-	e *error
-}
-
-func sysctl(mib []int32, out unsafe.Pointer, n uintptr) syscall.Errno {
-	_, _, e := unix.Syscall6(
-		unix.SYS___SYSCTL,
-		uintptr(unsafe.Pointer(&mib[0])),
-		uintptr(len(mib)),
-		uintptr(out),
-		uintptr(unsafe.Pointer(&n)),
-		uintptr(unsafe.Pointer(nil)),
-		0,
-	)
-	return e
-}
-
 func readValue(s sensor, div float64) (float64, error) {
 	if s.status == unknown {
 		return 0, fmt.Errorf("Unknown value received")
@@ -99,87 +85,16 @@ func readValue(s sensor, div float64) (float64, error) {
 	return float64(s.value) / div, nil
 }
 
-func readValues(mib []int32, c int32, values map[string]*interValue) {
-	var s sensor
-	var i int32
-	for i = 0; i < c; i++ {
-		mib[4] = i
-
-		if err := sysctl(mib, unsafe.Pointer(&s), unsafe.Sizeof(s)); err != 0 {
-			for _, value := range values {
-				if *value.e == errValueNotFound {
-					*value.e = err
-				}
-			}
-		}
-
-		desc := string(s.desc[:bytes.IndexByte(s.desc[:], 0)])
-		isState := strings.HasPrefix(desc, "battery ")
-
-		var value *interValue
-		var ok bool
-
-		if isState {
-			value, ok = values["state"]
-		} else {
-			value, ok = values[desc]
-		}
-		if !ok {
-			continue
-		}
-
-		if isState {
-			//TODO:battery idle(?)
-			if desc == "battery critical" {
-				*value.s, *value.e = Empty, nil
-			} else {
-				*value.s, *value.e = newState(desc[8:])
-			}
-			continue
-		}
-
-		if strings.HasSuffix(desc, "voltage") {
-			*value.v, *value.e = readValue(s, 1000000)
-		} else {
-			*value.v, *value.e = readValue(s, 1000)
-		}
-	}
+type sensordev struct {
+	num           int32
+	xname         [16]byte
+	maxnumt       [23]int32
+	sensors_count int32
 }
 
-func sensordevIter(cb func(sd sensordev, i int, err error) bool) {
-	mib := []int32{6, 11, 0}
-	var sd sensordev
-	var idx int
-	var i int32
-	for i = 0; ; i++ {
-		mib[2] = i
-
-		e := sysctl(mib, unsafe.Pointer(&sd), unsafe.Sizeof(sd))
-		if e != 0 {
-			if e == unix.ENXIO {
-				continue
-			}
-			if e == unix.ENOENT {
-				break
-			}
-		}
-
-		if bytes.HasPrefix(sd.xname[:], []byte("acpibat")) {
-			var err error
-			if e != 0 {
-				err = e
-			}
-			if cb(sd, idx, err) {
-				return
-			}
-			idx++
-		}
-	}
-}
-
-func getBattery(sd sensordev) (*Battery, error) {
-	b := &Battery{}
-	e := ErrPartial{
+func (sd *sensordev) get() (*Battery, error) {
+	var battery Battery
+	err := ErrPartial{
 		Design:        errValueNotFound,
 		Full:          errValueNotFound,
 		Current:       errValueNotFound,
@@ -189,91 +104,201 @@ func getBattery(sd sensordev) (*Battery, error) {
 		DesignVoltage: errValueNotFound,
 	}
 
-	mib := []int32{6, 11, sd.num, 0, 0}
+	mib := []int32{unix.CTL_HW, 11, sd.num, 0, 0}
+	var s sensor
+
+	iter := func(maxnumtIdx int32, cb func(string)) {
+		mib[3] = maxnumtIdx
+
+		for i := int32(0); i < sd.maxnumt[maxnumtIdx]; i++ {
+			mib[4] = i
+
+			if errno := sysctl(mib, unsafe.Pointer(&s), unsafe.Sizeof(s)); errno != 0 {
+				if err.Design == errValueNotFound {
+					err.Design = errno
+				}
+				if err.Full == errValueNotFound {
+					err.Full = errno
+				}
+				if err.Current == errValueNotFound {
+					err.Current = errno
+				}
+				if err.ChargeRate == errValueNotFound {
+					err.ChargeRate = errno
+				}
+				if err.State == errValueNotFound {
+					err.State = errno
+				}
+				if err.Voltage == errValueNotFound {
+					err.Voltage = errno
+				}
+				if err.DesignVoltage == errValueNotFound {
+					err.DesignVoltage = errno
+				}
+			}
+
+			// Convert 0-terminated C-string to a Go string
+			cb(string(s.desc[:bytes.IndexByte(s.desc[:], 0)]))
+		}
+	}
+
 	for _, w := range sensorW {
 		mib[3] = w
 
-		readValues(mib, sd.maxnumt[w], map[string]*interValue{
-			"rate":               {v: &b.ChargeRate, e: &e.ChargeRate},
-			"design capacity":    {v: &b.Design, e: &e.Design},
-			"last full capacity": {v: &b.Full, e: &e.Full},
-			"remaining capacity": {v: &b.Current, e: &e.Current},
-			"current voltage":    {v: &b.Voltage, e: &e.Voltage},
-			"voltage":            {v: &b.DesignVoltage, e: &e.DesignVoltage},
-			"state":              {s: &b.State, e: &e.State},
+		iter(w, func(desc string) {
+			if strings.HasPrefix(desc, "battery ") {
+				battery.State.specific, err.State = desc, nil
+
+				switch desc[8:] {
+				case "unknown":
+					battery.State.Raw = Unknown
+				case "full":
+					battery.State.Raw = Full
+				case "charging":
+					battery.State.Raw = Charging
+				case "discharging":
+					battery.State.Raw = Discharging
+				case "idle":
+					battery.State.Raw = Idle
+				case "critical":
+					battery.State.Raw = Empty
+				default:
+					battery.State.Raw = Undefined
+				}
+				return
+			}
+			switch desc {
+			case "rate":
+				battery.ChargeRate, err.ChargeRate = readValue(s, 1000)
+			case "design capacity":
+				battery.Design, err.Design = readValue(s, 1000)
+			case "last full capacity":
+				battery.Full, err.Full = readValue(s, 1000)
+			case "remaining capacity":
+				battery.Current, err.Current = readValue(s, 1000)
+			case "current voltage":
+				battery.Voltage, err.Voltage = readValue(s, 1000_000)
+			case "voltage":
+				battery.DesignVoltage, err.DesignVoltage = readValue(s, 1000_000)
+			default:
+				// Some other sensor value, not interesting
+			}
 		})
 	}
 
-	if e.DesignVoltage != nil && e.Voltage == nil {
-		b.DesignVoltage, e.DesignVoltage = b.Voltage, nil
+	if err.DesignVoltage != nil && err.Voltage == nil {
+		battery.DesignVoltage, err.DesignVoltage = battery.Voltage, nil
 	}
-
-	if e.ChargeRate == errValueNotFound {
-		if e.Voltage == nil {
-			mib[3] = sensorA
-
-			readValues(mib, sd.maxnumt[sensorA], map[string]*interValue{
-				"rate": {v: &b.ChargeRate, e: &e.ChargeRate},
+	if err.ChargeRate == errValueNotFound {
+		if err.Voltage == nil {
+			iter(sensorA, func(desc string) {
+				if desc == "rate" {
+					battery.ChargeRate, err.ChargeRate = readValue(s, 1000)
+					if err.ChargeRate == nil {
+						battery.ChargeRate *= battery.Voltage
+					}
+				}
 			})
-
-			b.ChargeRate *= b.Voltage
 		} else {
-			e.ChargeRate = e.Voltage
+			err.ChargeRate = err.Voltage
 		}
 	}
-	if e.Design == errValueNotFound || e.Full == errValueNotFound || e.Current == errValueNotFound {
-		mib[3] = sensorAH
-
-		readValues(mib, sd.maxnumt[sensorAH], map[string]*interValue{
-			"design capacity":    {v: &b.Design, e: &e.Design},
-			"last full capacity": {v: &b.Full, e: &e.Full},
-			"remaining capacity": {v: &b.Current, e: &e.Current},
+	if err.Design == errValueNotFound || err.Full == errValueNotFound || err.Current == errValueNotFound {
+		iter(sensorAH, func(desc string) {
+			switch desc {
+			case "design capacity":
+				if err.DesignVoltage != nil {
+					err.Design = err.DesignVoltage
+					return
+				}
+				battery.Design, err.Design = readValue(s, 1000)
+				if err.Design == nil {
+					battery.Design *= battery.DesignVoltage
+				}
+			case "last full capacity":
+				if err.Voltage != nil {
+					err.Full = err.Voltage
+					return
+				}
+				battery.Full, err.Full = readValue(s, 1000)
+				if err.Full == nil {
+					battery.Full *= battery.Voltage
+				}
+			case "remaining capacity":
+				if err.Voltage != nil {
+					err.Current = err.Voltage
+					return
+				}
+				battery.Current, err.Current = readValue(s, 1000)
+				if err.Current == nil {
+					battery.Current *= battery.Voltage
+				}
+			}
 		})
-
-		b.Design *= b.DesignVoltage
-		b.Full *= b.Voltage
-		b.Current *= b.Voltage
 	}
 
-	return b, e
+	return &battery, err
+}
+
+func getBatteryAtMIBIndex(i int32) (*Battery, int32, error) {
+	mib := []int32{
+		unix.CTL_HW,
+		11, // HW_SENSORS
+		0,
+	}
+	var sd sensordev
+	for ; ; i++ {
+		mib[2] = i
+
+		errno := sysctl(mib, unsafe.Pointer(&sd), unsafe.Sizeof(sd))
+		// if errno == unix.ENXIO {
+		// 	continue
+		// }
+		if errno == unix.ENOENT {
+			break
+		}
+		if errno != 0 {
+			continue
+		}
+		if bytes.HasPrefix(sd.xname[:], []byte("acpibat")) {
+			battery, err := sd.get()
+			return battery, i + 1, err
+		}
+	}
+	return nil, i, nil
 }
 
 func systemGet(idx int) (*Battery, error) {
-	var b *Battery
-	var e error
-
-	sensordevIter(func(sd sensordev, i int, err error) bool {
-		if i == idx {
-			if err == nil {
-				b, e = getBattery(sd)
-			} else {
-				e = err
-			}
-			return true
+	var i int32
+	for idxCurr := 0; ; idxCurr++ {
+		battery, iNext, err := getBatteryAtMIBIndex(i)
+		// If this is the index we look for, grab it.
+		// Otherwise just move on, regardless of errors etc.
+		if idxCurr == idx {
+			return battery, err
 		}
-		return false
-	})
 
-	if b == nil {
-		return nil, ErrNotFound
+		i = iNext
 	}
-	return b, e
+
+	return nil, ErrNotFound
 }
 
 func systemGetAll() ([]*Battery, error) {
 	var batteries []*Battery
 	var errors Errors
 
-	sensordevIter(func(sd sensordev, i int, err error) bool {
-		var b *Battery
-		if err == nil {
-			b, err = getBattery(sd)
+	var i int32
+	for {
+		battery, iNext, err := getBatteryAtMIBIndex(i)
+		if battery == nil && err == nil { // no more batteries
+			break
 		}
-
-		batteries = append(batteries, b)
+		batteries = append(batteries, battery)
 		errors = append(errors, err)
-		return false
-	})
+
+		i = iNext
+	}
 
 	return batteries, errors
 }

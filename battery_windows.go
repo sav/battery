@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017,2023 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -23,6 +23,7 @@ package battery
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"syscall"
 	"unsafe"
@@ -129,7 +130,7 @@ var setupDiEnumDeviceInterfaces = setupapi.NewProc("SetupDiEnumDeviceInterfaces"
 var setupDiGetDeviceInterfaceDetailW = setupapi.NewProc("SetupDiGetDeviceInterfaceDetailW")
 var setupDiDestroyDeviceInfoList = setupapi.NewProc("SetupDiDestroyDeviceInfoList")
 
-func readState(powerState uint32) State {
+func readState(powerState uint32) AgnosticState {
 	switch {
 	case powerState&0x00000004 != 0:
 		return Charging
@@ -140,7 +141,7 @@ func readState(powerState uint32) State {
 	case powerState&0x00000001 != 0:
 		return Full
 	default:
-		return Unknown
+		return Undefined
 	}
 }
 
@@ -290,7 +291,8 @@ func systemGet(idx int) (*Battery, error) {
 		b.ChargeRate, e.ChargeRate = int32ToFloat64(bs.Rate)
 		b.Voltage, e.Voltage = uint32ToFloat64(bs.Voltage)
 		b.Voltage /= 1000
-		b.State = readState(bs.PowerState)
+		b.State.Raw = readState(bs.PowerState)
+		b.State.specific = fmt.Sprintf("%x", bs.PowerState)
 	} else {
 		e.Current = err
 		e.ChargeRate = err
