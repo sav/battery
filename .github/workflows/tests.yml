@@ -8,15 +8,15 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                go: [1.8, 1.9, "1.10", 1.11, 1.12, 1.13, 1.14, 1.15, 1.16]
+                go: [1.18, 1.19, 1.20]
 
         steps:
             - name: setup Go
-              uses: actions/setup-go@v2
+              uses: actions/setup-go@v4
               with:
                   go-version: ${{ matrix.go }}
 
-            - uses: actions/checkout@v2
+            - uses: actions/checkout@v3
             - name: resolve dependencies
               run: go get -v -t -d ./...
             - name: build
