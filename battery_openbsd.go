@@ -45,6 +45,12 @@ func sysctl(mib []int32, out unsafe.Pointer, n uintptr) unix.Errno {
 
 var errValueNotFound = fmt.Errorf("Value not found")
 
+func setErr(err *error, newErr error) {
+	if *err == errValueNotFound {
+		*err = newErr
+	}
+}
+
 var sensorW = [4]int32{
 	2,  // SENSOR_VOLTS_DC (uV)
 	5,  // SENSOR_WATTS (uW)
@@ -77,7 +83,7 @@ type sensor struct {
 	flags  int32
 }
 
-func readValue(s sensor, div float64) (float64, error) {
+func (s *sensor) readValue(div float64) (float64, error) {
 	if s.status == unknown {
 		return 0, fmt.Errorf("Unknown value received")
 	}
@@ -85,25 +91,19 @@ func readValue(s sensor, div float64) (float64, error) {
 	return float64(s.value) / div, nil
 }
 
-func handleA(s sensor, factor float64, field *float64, fieldErr *error) {
-	*field, *fieldErr = readValue(s, 1000)
+func (s *sensor) handleA(factor float64, field *float64, fieldErr *error) {
+	*field, *fieldErr = s.readValue(1000)
 	if *fieldErr == nil {
 		*field *= factor
 	}
 }
 
-func handleAH(s sensor, factor float64, factorErr error, field *float64, fieldErr *error) {
+func (s *sensor) handleAH(factor float64, factorErr error, field *float64, fieldErr *error) {
 	if factorErr != nil {
 		*fieldErr = factorErr
 		return
 	}
-	handleA(s, factor, field, fieldErr)
-}
-
-func setErr(err *error, newErr error) {
-	if *err == errValueNotFound {
-		*err = newErr
-	}
+	s.handleA(factor, field, fieldErr)
 }
 
 type sensordev struct {
@@ -176,17 +176,17 @@ func (sd *sensordev) get() (*Battery, error) {
 			}
 			switch desc {
 			case "rate":
-				battery.ChargeRate, err.ChargeRate = readValue(s, 1000)
+				battery.ChargeRate, err.ChargeRate = s.readValue(1000)
 			case "design capacity":
-				battery.Design, err.Design = readValue(s, 1000)
+				battery.Design, err.Design = s.readValue(1000)
 			case "last full capacity":
-				battery.Full, err.Full = readValue(s, 1000)
+				battery.Full, err.Full = s.readValue(1000)
 			case "remaining capacity":
-				battery.Current, err.Current = readValue(s, 1000)
+				battery.Current, err.Current = s.readValue(1000)
 			case "current voltage":
-				battery.Voltage, err.Voltage = readValue(s, 1000_000)
+				battery.Voltage, err.Voltage = s.readValue(1000_000)
 			case "voltage":
-				battery.DesignVoltage, err.DesignVoltage = readValue(s, 1000_000)
+				battery.DesignVoltage, err.DesignVoltage = s.readValue(1000_000)
 			}
 		})
 	}
@@ -198,7 +198,7 @@ func (sd *sensordev) get() (*Battery, error) {
 		if err.Voltage == nil {
 			iter(sensorA, func(desc string) {
 				if desc == "rate" {
-					handleA(s, battery.Voltage, &battery.ChargeRate, &err.ChargeRate)
+					s.handleA(battery.Voltage, &battery.ChargeRate, &err.ChargeRate)
 				}
 			})
 		} else {
@@ -209,11 +209,11 @@ func (sd *sensordev) get() (*Battery, error) {
 		iter(sensorAH, func(desc string) {
 			switch desc {
 			case "design capacity":
-				handleAH(s, battery.DesignVoltage, err.DesignVoltage, &battery.Design, &err.Design)
+				s.handleAH(battery.DesignVoltage, err.DesignVoltage, &battery.Design, &err.Design)
 			case "last full capacity":
-				handleAH(s, battery.Voltage, err.Voltage, &battery.Full, &err.Full)
+				s.handleAH(battery.Voltage, err.Voltage, &battery.Full, &err.Full)
 			case "remaining capacity":
-				handleAH(s, battery.Voltage, err.Voltage, &battery.Current, &err.Current)
+				s.handleAH(battery.Voltage, err.Voltage, &battery.Current, &err.Current)
 			}
 		})
 	}
