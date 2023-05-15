@@ -85,6 +85,27 @@ func readValue(s sensor, div float64) (float64, error) {
 	return float64(s.value) / div, nil
 }
 
+func handleA(s sensor, factor float64, field *float64, fieldErr *error) {
+	*field, *fieldErr = readValue(s, 1000)
+	if *fieldErr == nil {
+		*field *= factor
+	}
+}
+
+func handleAH(s sensor, factor float64, factorErr error, field *float64, fieldErr *error) {
+	if factorErr != nil {
+		*fieldErr = factorErr
+		return
+	}
+	handleA(s, factor, field, fieldErr)
+}
+
+func setErr(err *error, newErr error) {
+	if *err == errValueNotFound {
+		*err = newErr
+	}
+}
+
 type sensordev struct {
 	num           int32
 	xname         [16]byte
@@ -114,27 +135,13 @@ func (sd *sensordev) get() (*Battery, error) {
 			mib[4] = i
 
 			if errno := sysctl(mib, unsafe.Pointer(&s), unsafe.Sizeof(s)); errno != 0 {
-				if err.Design == errValueNotFound {
-					err.Design = errno
-				}
-				if err.Full == errValueNotFound {
-					err.Full = errno
-				}
-				if err.Current == errValueNotFound {
-					err.Current = errno
-				}
-				if err.ChargeRate == errValueNotFound {
-					err.ChargeRate = errno
-				}
-				if err.State == errValueNotFound {
-					err.State = errno
-				}
-				if err.Voltage == errValueNotFound {
-					err.Voltage = errno
-				}
-				if err.DesignVoltage == errValueNotFound {
-					err.DesignVoltage = errno
-				}
+				setErr(&err.Design, errno)
+				setErr(&err.Full, errno)
+				setErr(&err.Current, errno)
+				setErr(&err.ChargeRate, errno)
+				setErr(&err.Voltage, errno)
+				setErr(&err.DesignVoltage, errno)
+				setErr(&err.State, errno)
 			}
 
 			// Convert 0-terminated C-string to a Go string
@@ -180,8 +187,6 @@ func (sd *sensordev) get() (*Battery, error) {
 				battery.Voltage, err.Voltage = readValue(s, 1000_000)
 			case "voltage":
 				battery.DesignVoltage, err.DesignVoltage = readValue(s, 1000_000)
-			default:
-				// Some other sensor value, not interesting
 			}
 		})
 	}
@@ -193,10 +198,7 @@ func (sd *sensordev) get() (*Battery, error) {
 		if err.Voltage == nil {
 			iter(sensorA, func(desc string) {
 				if desc == "rate" {
-					battery.ChargeRate, err.ChargeRate = readValue(s, 1000)
-					if err.ChargeRate == nil {
-						battery.ChargeRate *= battery.Voltage
-					}
+					handleA(s, battery.Voltage, &battery.ChargeRate, &err.ChargeRate)
 				}
 			})
 		} else {
@@ -207,32 +209,11 @@ func (sd *sensordev) get() (*Battery, error) {
 		iter(sensorAH, func(desc string) {
 			switch desc {
 			case "design capacity":
-				if err.DesignVoltage != nil {
-					err.Design = err.DesignVoltage
-					return
-				}
-				battery.Design, err.Design = readValue(s, 1000)
-				if err.Design == nil {
-					battery.Design *= battery.DesignVoltage
-				}
+				handleAH(s, battery.DesignVoltage, err.DesignVoltage, &battery.Design, &err.Design)
 			case "last full capacity":
-				if err.Voltage != nil {
-					err.Full = err.Voltage
-					return
-				}
-				battery.Full, err.Full = readValue(s, 1000)
-				if err.Full == nil {
-					battery.Full *= battery.Voltage
-				}
+				handleAH(s, battery.Voltage, err.Voltage, &battery.Full, &err.Full)
 			case "remaining capacity":
-				if err.Voltage != nil {
-					err.Current = err.Voltage
-					return
-				}
-				battery.Current, err.Current = readValue(s, 1000)
-				if err.Current == nil {
-					battery.Current *= battery.Voltage
-				}
+				handleAH(s, battery.Voltage, err.Voltage, &battery.Current, &err.Current)
 			}
 		})
 	}
@@ -251,9 +232,6 @@ func getBatteryAtMIBIndex(i int32) (*Battery, int32, error) {
 		mib[2] = i
 
 		errno := sysctl(mib, unsafe.Pointer(&sd), unsafe.Sizeof(sd))
-		// if errno == unix.ENXIO {
-		// 	continue
-		// }
 		if errno == unix.ENOENT {
 			break
 		}
