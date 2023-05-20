@@ -123,7 +123,7 @@ func getByPath(path string) (*Battery, error) {
 			b.State.Raw = Charging
 		case "Discharging":
 			b.State.Raw = Discharging
-		case "NotCharging":
+		case "Not charging":
 			b.State.Raw = Idle
 		default:
 			b.State.Raw = Undefined
