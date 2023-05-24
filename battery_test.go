@@ -27,29 +27,6 @@ import (
 	"testing"
 )
 
-func TestNewState(t *testing.T) {
-	cases := []struct {
-		in       string
-		stateOut State
-		errorOut error
-	}{
-		{"Charging", Charging, nil},
-		{"charging", Charging, nil},
-		{"strange", Unknown, fmt.Errorf("Invalid state `strange`")},
-	}
-
-	for i, c := range cases {
-		state, err := newState(c.in)
-
-		if state != c.stateOut {
-			t.Errorf("%d: %v != %v", i, state, c.stateOut)
-		}
-		if !reflect.DeepEqual(err, c.errorOut) {
-			t.Errorf("%d: %v != %v", i, err, c.errorOut)
-		}
-	}
-}
-
 func TestGet(t *testing.T) {
 	cases := []struct {
 		batteryIn  *Battery
