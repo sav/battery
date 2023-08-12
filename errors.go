@@ -60,6 +60,7 @@ func (f ErrFatal) Error() string {
 // The fields represent fields in the Battery type.
 type ErrPartial struct {
 	State         error
+	Capacity      error
 	Current       error
 	Full          error
 	Design        error
@@ -74,6 +75,7 @@ func (p ErrPartial) Error() string {
 	}
 	errors := map[string]error{
 		"State":         p.State,
+		"Capacity":      p.Capacity,
 		"Current":       p.Current,
 		"Full":          p.Full,
 		"Design":        p.Design,
@@ -81,7 +83,7 @@ func (p ErrPartial) Error() string {
 		"Voltage":       p.Voltage,
 		"DesignVoltage": p.DesignVoltage,
 	}
-	keys := []string{"State", "Current", "Full", "Design", "ChargeRate", "Voltage", "DesignVoltage"}
+	keys := []string{"State", "Capacity", "Current", "Full", "Design", "ChargeRate", "Voltage", "DesignVoltage"}
 	s := "{"
 	for _, name := range keys {
 		err := errors[name]
@@ -94,6 +96,7 @@ func (p ErrPartial) Error() string {
 
 func (p ErrPartial) isNil() bool {
 	return p.State == nil &&
+		p.Capacity == nil &&
 		p.Current == nil &&
 		p.Full == nil &&
 		p.Design == nil &&
@@ -104,6 +107,7 @@ func (p ErrPartial) isNil() bool {
 
 func (p ErrPartial) noNil() bool {
 	return p.State != nil &&
+		p.Capacity != nil &&
 		p.Current != nil &&
 		p.Full != nil &&
 		p.Design != nil &&

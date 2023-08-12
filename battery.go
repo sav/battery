@@ -96,6 +96,8 @@ func (s State) GoString() string {
 type Battery struct {
 	// Current battery state.
 	State State
+	// Current (momentary) capacity (in %).
+	Capacity float64
 	// Current (momentary) capacity (in mWh).
 	Current float64
 	// Last known full capacity (in mWh).
