@@ -30,20 +30,48 @@ import (
 
 const sysfs = "/sys/class/power_supply"
 
+func readString(path, filename string) (string, error) {
+	bytes, err := ioutil.ReadFile(filepath.Join(path, filename))
+	if err != nil {
+		return "", err
+	}
+	return string(bytes[:len(bytes)-1]), nil
+}
+
+func readInt(path, filename string) (int64, error) {
+	str, err := readString(path, filename)
+	if err != nil {
+		return 0, err
+	}
+	num, err := strconv.ParseInt(str, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return num, nil
+}
+
 func readFloat(path, filename string) (float64, error) {
-	str, err := ioutil.ReadFile(filepath.Join(path, filename))
+	str, err := readString(path, filename)
 	if err != nil {
 		return 0, err
 	}
-	num, err := strconv.ParseFloat(string(str[:len(str)-1]), 64)
+	num, err := strconv.ParseFloat(str, 64)
 	if err != nil {
 		return 0, err
 	}
-	return num / 1000, nil // Convert micro->milli
+	return num, nil
+}
+
+func readMilli(path, filename string) (float64, error) {
+	val, err := readFloat(path, filename)
+	if err != nil {
+		return 0, err
+	}
+	return val / 1000, nil // Convert micro->milli
 }
 
 func readAmp(path, filename string, volts float64) (float64, error) {
-	val, err := readFloat(path, filename)
+	val, err := readMilli(path, filename)
 	if err != nil {
 		return 0, err
 	}
@@ -74,13 +102,14 @@ func getBatteryFiles() ([]string, error) {
 func getByPath(path string) (*Battery, error) {
 	b := &Battery{}
 	e := ErrPartial{}
-	b.Current, e.Current = readFloat(path, "energy_now")
-	b.Voltage, e.Voltage = readFloat(path, "voltage_now")
+	b.Capacity, e.Capacity = readFloat(path, "capacity")
+	b.Current, e.Current = readMilli(path, "energy_now")
+	b.Voltage, e.Voltage = readMilli(path, "voltage_now")
 	b.Voltage /= 1000
 
-	b.DesignVoltage, e.DesignVoltage = readFloat(path, "voltage_max_design")
+	b.DesignVoltage, e.DesignVoltage = readMilli(path, "voltage_max_design")
 	if e.DesignVoltage != nil {
-		b.DesignVoltage, e.DesignVoltage = readFloat(path, "voltage_min_design")
+		b.DesignVoltage, e.DesignVoltage = readMilli(path, "voltage_min_design")
 	}
 	if e.DesignVoltage != nil && e.Voltage == nil {
 		b.DesignVoltage, e.DesignVoltage = b.Voltage, nil
@@ -103,9 +132,14 @@ func getByPath(path string) (*Battery, error) {
 			e.ChargeRate = e.Voltage
 		}
 	} else {
-		b.Full, e.Full = readFloat(path, "energy_full")
-		b.Design, e.Design = readFloat(path, "energy_full_design")
-		b.ChargeRate, e.ChargeRate = readFloat(path, "power_now")
+		b.Full, e.Full = readMilli(path, "energy_full")
+		b.Design, e.Design = readMilli(path, "energy_full_design")
+		b.ChargeRate, e.ChargeRate = readMilli(path, "power_now")
+	}
+
+	if e.Capacity != nil && e.Current == nil && e.Full != nil {
+		b.Capacity = b.Current / (b.Full * 100)
+		e.Capacity = nil
 	}
 
 	status, err := ioutil.ReadFile(filepath.Join(path, "status"))
