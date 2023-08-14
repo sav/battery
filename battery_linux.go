@@ -24,6 +24,7 @@ package battery
 import (
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 )
@@ -164,6 +165,11 @@ func getByPath(directory string) (*Battery, error) {
 		}
 	} else {
 		e.State = err
+	}
+
+	b.Name, err = readString(directory, "model_name")
+	if err != nil {
+		b.Name = path.Base(directory)
 	}
 
 	return b, e
