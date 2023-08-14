@@ -30,16 +30,16 @@ import (
 
 const sysfs = "/sys/class/power_supply"
 
-func readString(path, filename string) (string, error) {
-	bytes, err := ioutil.ReadFile(filepath.Join(path, filename))
+func readString(directory, filename string) (string, error) {
+	bytes, err := ioutil.ReadFile(filepath.Join(directory, filename))
 	if err != nil {
 		return "", err
 	}
 	return string(bytes[:len(bytes)-1]), nil
 }
 
-func readInt(path, filename string) (int64, error) {
-	str, err := readString(path, filename)
+func readInt(directory, filename string) (int64, error) {
+	str, err := readString(directory, filename)
 	if err != nil {
 		return 0, err
 	}
@@ -50,8 +50,8 @@ func readInt(path, filename string) (int64, error) {
 	return num, nil
 }
 
-func readFloat(path, filename string) (float64, error) {
-	str, err := readString(path, filename)
+func readFloat(directory, filename string) (float64, error) {
+	str, err := readString(directory, filename)
 	if err != nil {
 		return 0, err
 	}
@@ -62,24 +62,24 @@ func readFloat(path, filename string) (float64, error) {
 	return num, nil
 }
 
-func readMilli(path, filename string) (float64, error) {
-	val, err := readFloat(path, filename)
+func readMilli(directory, filename string) (float64, error) {
+	val, err := readFloat(directory, filename)
 	if err != nil {
 		return 0, err
 	}
 	return val / 1000, nil // Convert micro->milli
 }
 
-func readAmp(path, filename string, volts float64) (float64, error) {
-	val, err := readMilli(path, filename)
+func readAmp(directory, filename string, volts float64) (float64, error) {
+	val, err := readMilli(directory, filename)
 	if err != nil {
 		return 0, err
 	}
 	return val * volts, nil
 }
 
-func isBattery(path string) bool {
-	t, err := ioutil.ReadFile(filepath.Join(path, "type"))
+func isBattery(directory string) bool {
+	t, err := ioutil.ReadFile(filepath.Join(directory, "type"))
 	return err == nil && string(t) == "Battery\n"
 }
 
@@ -99,17 +99,17 @@ func getBatteryFiles() ([]string, error) {
 	return bFiles, nil
 }
 
-func getByPath(path string) (*Battery, error) {
+func getByPath(directory string) (*Battery, error) {
 	b := &Battery{}
 	e := ErrPartial{}
-	b.Capacity, e.Capacity = readFloat(path, "capacity")
-	b.Current, e.Current = readMilli(path, "energy_now")
-	b.Voltage, e.Voltage = readMilli(path, "voltage_now")
+	b.Capacity, e.Capacity = readFloat(directory, "capacity")
+	b.Current, e.Current = readMilli(directory, "energy_now")
+	b.Voltage, e.Voltage = readMilli(directory, "voltage_now")
 	b.Voltage /= 1000
 
-	b.DesignVoltage, e.DesignVoltage = readMilli(path, "voltage_max_design")
+	b.DesignVoltage, e.DesignVoltage = readMilli(directory, "voltage_max_design")
 	if e.DesignVoltage != nil {
-		b.DesignVoltage, e.DesignVoltage = readMilli(path, "voltage_min_design")
+		b.DesignVoltage, e.DesignVoltage = readMilli(directory, "voltage_min_design")
 	}
 	if e.DesignVoltage != nil && e.Voltage == nil {
 		b.DesignVoltage, e.DesignVoltage = b.Voltage, nil
@@ -118,23 +118,23 @@ func getByPath(path string) (*Battery, error) {
 
 	if os.IsNotExist(e.Current) {
 		if e.DesignVoltage == nil {
-			b.Design, e.Design = readAmp(path, "charge_full_design", b.DesignVoltage)
+			b.Design, e.Design = readAmp(directory, "charge_full_design", b.DesignVoltage)
 		} else {
 			e.Design = e.DesignVoltage
 		}
 		if e.Voltage == nil {
-			b.Current, e.Current = readAmp(path, "charge_now", b.Voltage)
-			b.Full, e.Full = readAmp(path, "charge_full", b.Voltage)
-			b.ChargeRate, e.ChargeRate = readAmp(path, "current_now", b.Voltage)
+			b.Current, e.Current = readAmp(directory, "charge_now", b.Voltage)
+			b.Full, e.Full = readAmp(directory, "charge_full", b.Voltage)
+			b.ChargeRate, e.ChargeRate = readAmp(directory, "current_now", b.Voltage)
 		} else {
 			e.Current = e.Voltage
 			e.Full = e.Voltage
 			e.ChargeRate = e.Voltage
 		}
 	} else {
-		b.Full, e.Full = readMilli(path, "energy_full")
-		b.Design, e.Design = readMilli(path, "energy_full_design")
-		b.ChargeRate, e.ChargeRate = readMilli(path, "power_now")
+		b.Full, e.Full = readMilli(directory, "energy_full")
+		b.Design, e.Design = readMilli(directory, "energy_full_design")
+		b.ChargeRate, e.ChargeRate = readMilli(directory, "power_now")
 	}
 
 	if e.Capacity != nil && e.Current == nil && e.Full != nil {
@@ -142,7 +142,7 @@ func getByPath(path string) (*Battery, error) {
 		e.Capacity = nil
 	}
 
-	status, err := ioutil.ReadFile(filepath.Join(path, "status"))
+	status, err := ioutil.ReadFile(filepath.Join(directory, "status"))
 	if err == nil {
 		status := string(status[:len(status)-1])
 		b.State.specific = status
