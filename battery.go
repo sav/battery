@@ -94,6 +94,7 @@ func (s State) GoString() string {
 
 // Battery type represents a single battery entry information.
 type Battery struct {
+	Name string
 	// Current battery state.
 	State State
 	// Current (momentary) capacity (in %).
